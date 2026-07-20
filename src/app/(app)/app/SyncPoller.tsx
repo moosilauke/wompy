@@ -58,17 +58,18 @@ export function SyncPoller() {
   }, [runSync]);
 
   return (
-    <div className="flex items-center gap-3 text-xs">
+    <div className="flex items-center gap-3 text-[13px]">
       {lastError && (
-        <span className="text-coral" title={lastError}>
+        <span className="font-bold text-coral" title={lastError}>
           sync error
         </span>
       )}
+      {/* Secondary action — coral is reserved for the primary button. */}
       <button
         type="button"
         onClick={runSync}
         disabled={syncing}
-        className="rounded-full border border-white/25 px-3 py-1 font-bold text-white/90 transition-colors hover:bg-white/10 disabled:opacity-50"
+        className="rounded-full bg-spruce-raised px-[14px] py-[7px] font-bold text-on-spruce-muted transition-colors hover:text-white disabled:opacity-50"
       >
         {syncing ? "Syncing…" : "Sync now"}
       </button>

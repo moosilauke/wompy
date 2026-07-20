@@ -6,51 +6,53 @@ import { SyncPoller } from "./SyncPoller";
 const TABS = ["All", "Personal", "Work", "Promotions"] as const;
 
 /**
- * Top bar: 64px, spruce background, mint logo mark + wordmark, nav tabs, and the
- * account control on the right (the authenticated counterpart to the marketing
- * version's Log in / Sign up).
+ * Top bar: 64px of spruce, flush against the sidebar below it (same color, no
+ * seam). Mint is reserved for the logo mark and the active-tab chip; coral does
+ * the primary-action job on the right.
  */
 export function TopBar({ userEmail }: { userEmail: string | null }) {
   return (
-    <header className="flex h-16 shrink-0 items-center gap-6 bg-spruce px-5 text-white">
-      <div className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className="inline-block h-8 w-8 rounded-[10px] bg-mint"
-        />
-        <span className="font-display text-[21px] font-bold tracking-[-0.5px] lowercase">
-          wompy
-        </span>
+    <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
+      <div className="flex items-center gap-7">
+        <div className="flex items-center gap-[9px]">
+          <span
+            aria-hidden
+            className="inline-block h-7 w-7 shrink-0 rounded-[9px] bg-mint"
+          />
+          <span className="font-display text-[19px] font-bold tracking-[-0.5px] text-white lowercase">
+            wompy
+          </span>
+        </div>
+
+        <nav className="hidden items-center gap-1 sm:flex">
+          {TABS.map((tab, i) => (
+            <span
+              key={tab}
+              aria-disabled
+              title="Filtering arrives with the Contact/Company classifier"
+              className={`cursor-default rounded-[10px] px-[13px] py-[7px] text-[13px] font-bold ${
+                i === 0
+                  ? "bg-[oklch(0.8_0.13_175_/_0.25)] text-white"
+                  : "text-on-spruce-muted"
+              }`}
+            >
+              {tab}
+            </span>
+          ))}
+        </nav>
       </div>
 
-      <nav className="ml-2 hidden items-center gap-1 sm:flex">
-        {TABS.map((tab, i) => (
-          <span
-            key={tab}
-            aria-disabled
-            title="Filtering arrives with the Contact/Company classifier"
-            className={
-              i === 0
-                ? "rounded-full bg-mint/25 px-3 py-1.5 text-sm font-bold text-mint"
-                : "cursor-default rounded-full px-3 py-1.5 text-sm font-semibold text-white/55"
-            }
-          >
-            {tab}
-          </span>
-        ))}
-      </nav>
-
-      <div className="ml-auto flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <SyncPoller />
         {userEmail && (
-          <span className="hidden text-sm text-white/70 md:inline">
+          <span className="hidden text-[13px] font-bold text-on-spruce-muted md:inline">
             {userEmail}
           </span>
         )}
         <form action={signOut}>
           <button
             type="submit"
-            className="rounded-full border border-white/25 px-4 py-1.5 text-sm font-bold text-white/90 transition-colors hover:bg-white/10"
+            className="rounded-full bg-coral px-[18px] py-[9px] text-[13px] font-extrabold text-white shadow-[0_4px_12px_oklch(0.5_0.12_25_/_0.4)] transition-opacity hover:opacity-90"
           >
             Sign out
           </button>

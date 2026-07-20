@@ -26,11 +26,11 @@ export function Avatar({
   const hue = HUE_CLASSES[avatarHueIndex(address)];
   return (
     <span
-      className={`${hue} inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white/95`}
+      className={`${hue} inline-flex shrink-0 items-center justify-center rounded-full font-extrabold text-white shadow-[0_3px_8px_rgba(0,0,0,0.25)]`}
       style={{
         width: size,
         height: size,
-        fontSize: Math.max(11, Math.round(size * 0.36)),
+        fontSize: Math.max(11, Math.round(size * 0.32)),
       }}
       aria-hidden
     >

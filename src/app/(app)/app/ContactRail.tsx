@@ -12,11 +12,17 @@ export interface RailThread {
   extraParticipants: number;
   snippet: string;
   lastMessageAt: string | null;
+  /** Drives the unread treatment (bold name, brighter snippet, coral dot).
+   * Read/unread isn't tracked in the schema yet, so this is always false for
+   * now — the styling is here and ready for when that data exists. */
+  unread: boolean;
 }
 
 /**
- * Left contact rail (280px, cream). One row per conversation, newest first.
- * The selected row gets the tinted mint background from the design spec.
+ * Left contact rail — dark spruce, full height, flush against the top bar.
+ *
+ * Spruce is the only dark tone in the palette: the rail, the top bar, and the
+ * outgoing bubbles all share it. Row content is therefore light-on-dark.
  */
 export function ContactRail({
   threads,
@@ -26,24 +32,27 @@ export function ContactRail({
   selectedId: string | null;
 }) {
   return (
-    <aside className="flex w-[280px] shrink-0 flex-col border-r border-black/[0.06] bg-cream">
+    <aside className="flex w-[320px] shrink-0 flex-col border-r border-spruce-edge bg-spruce shadow-[2px_0_16px_rgba(0,0,0,0.15)]">
       {/* Decorative search — real search is a later step. */}
-      <div className="p-3">
+      <div className="px-4 pb-2.5 pt-4">
         <div
-          className="flex items-center rounded-full bg-black/[0.04] px-4 py-2 text-sm text-text-muted-3"
+          className="flex items-center gap-2 rounded-[14px] bg-spruce-raised px-3.5 py-2.5"
           aria-hidden
         >
-          Search people or messages
+          <span className="h-4 w-4 shrink-0 rounded-full border-2 border-on-spruce-muted" />
+          <span className="text-sm font-semibold text-on-spruce-muted">
+            Search people or messages
+          </span>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto pb-3">
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4">
         {threads.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-text-muted">
+          <p className="px-3 py-6 text-sm text-on-spruce-muted">
             No conversations yet. New mail will appear here after it syncs.
           </p>
         ) : (
-          <ul>
+          <ul className="flex flex-col gap-0.5">
             {threads.map((thread) => {
               const active = thread.id === selectedId;
               return (
@@ -51,34 +60,53 @@ export function ContactRail({
                   <Link
                     href={`/app?thread=${thread.id}`}
                     aria-current={active ? "true" : undefined}
-                    className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+                    className={`flex items-center gap-[11px] rounded-xl p-2.5 transition-colors ${
                       active
-                        ? "bg-mint/20"
-                        : "hover:bg-black/[0.03]"
+                        ? "bg-[oklch(0.8_0.13_175_/_0.25)]"
+                        : "hover:bg-white/[0.06]"
                     }`}
                   >
                     <Avatar
                       address={thread.primaryAddress}
                       label={thread.label}
-                      size={40}
+                      size={44}
                     />
-                    <span className="min-w-0 flex-1">
+                    <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
                       <span className="flex items-baseline justify-between gap-2">
-                        <span className="truncate font-bold text-text-body">
+                        <span
+                          className={`truncate text-sm text-on-spruce ${
+                            thread.unread ? "font-extrabold" : "font-bold"
+                          }`}
+                        >
                           {thread.label}
                           {thread.extraParticipants > 0 && (
-                            <span className="font-semibold text-text-muted">
+                            <span className="font-semibold text-on-spruce-muted">
                               {" "}
                               +{thread.extraParticipants}
                             </span>
                           )}
                         </span>
-                        <span className="shrink-0 text-[11px] text-text-muted-3">
+                        <span className="shrink-0 text-xs text-on-spruce-muted">
                           {railTimestamp(thread.lastMessageAt)}
                         </span>
                       </span>
-                      <span className="mt-0.5 block truncate text-[13px] text-text-muted">
-                        {thread.snippet}
+
+                      <span className="flex min-w-0 items-center justify-between gap-2">
+                        <span
+                          className={`min-w-0 flex-1 truncate text-[12.5px] ${
+                            thread.unread
+                              ? "font-bold text-on-spruce-bright"
+                              : "font-medium text-on-spruce-muted"
+                          }`}
+                        >
+                          {thread.snippet}
+                        </span>
+                        {thread.unread && (
+                          <span
+                            aria-label="Unread"
+                            className="h-[9px] w-[9px] shrink-0 rounded-full bg-coral"
+                          />
+                        )}
                       </span>
                     </span>
                   </Link>

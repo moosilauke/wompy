@@ -8,21 +8,32 @@
  * them; no designed components are built yet in this backend-foundation session.
  */
 :root {
-  /* Brand palette */
-  --spruce: oklch(0.33 0.06 190);        /* nav bar, "me" bubbles, dark pricing card, footer */
-  --mint: oklch(0.8 0.13 175);           /* logo mark, active tab, feature chips, avatar accents */
-  --coral: oklch(0.7 0.12 25);           /* primary CTAs, unread dots, "most popular" badge */
+  /* Brand palette — spruce is the ONLY dark tone; never introduce a second. */
+  --spruce: oklch(0.33 0.06 190);        /* top nav, sidebar, "me" bubbles, footer */
+  --spruce-raised: oklch(0.4 0.07 190);  /* raised fills on spruce, e.g. the search pill */
+  --spruce-edge: oklch(0.28 0.05 190);   /* hairline borders between spruce surfaces */
+  --mint: oklch(0.8 0.13 175);           /* logo mark + small accent chips ONLY */
+  --coral: oklch(0.7 0.12 25);           /* CTAs, send button, unread dots, badges */
 
   /* Backgrounds */
-  --cream: oklch(0.96 0.015 90);         /* page / sidebar background (~#fdfbf7) */
+  --cream: oklch(0.96 0.015 90);         /* page background, reading-pane header (~#fdfbf7) */
   --reading-pane: oklch(0.965 0.014 88); /* message list background */
-  --bubble-incoming: #ffffff;            /* bubbles from other people / Wompy account */
+  --bubble-incoming: #ffffff;            /* bubbles from other people */
 
-  /* Text */
+  /* Text on light surfaces */
   --text-body: #2c2a24;
   --text-muted: #6b6558;
   --text-muted-2: #9a9789;
   --text-muted-3: #a39c8c;
+
+  /* Text on the dark spruce sidebar */
+  --on-spruce: #ffffff;                  /* contact names */
+  --on-spruce-muted: #a9bab7;            /* snippets, timestamps, inactive tabs */
+  --on-spruce-bright: #e4e9e7;           /* unread snippets */
+
+  /* Day-divider pill in the reading pane */
+  --divider-bg: #eae5da;
+  --divider-text: #8a8375;
 
   /* Per-contact avatar hues (dusty blue / sage / olive / sand / terracotta) */
   --avatar-blue: oklch(0.76 0.09 240);
@@ -37,6 +48,13 @@
 
 @theme inline {
   --color-spruce: var(--spruce);
+  --color-spruce-raised: var(--spruce-raised);
+  --color-spruce-edge: var(--spruce-edge);
+  --color-on-spruce: var(--on-spruce);
+  --color-on-spruce-muted: var(--on-spruce-muted);
+  --color-on-spruce-bright: var(--on-spruce-bright);
+  --color-divider-bg: var(--divider-bg);
+  --color-divider-text: var(--divider-text);
   --color-mint: var(--mint);
   --color-coral: var(--coral);
   --color-cream: var(--cream);
@@ -63,9 +81,14 @@
   --radius-card: 14px;
   --radius-pill: 100px;
 
-  /* Shadows — soft, low-opacity only (never hard drop shadows) */
-  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.05);
-  --shadow-cta: 0 4px 14px rgba(226, 114, 90, 0.35);
+  /* Shadows — soft lift everywhere; nothing sits flat on a bare 1px border. */
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.05);      /* incoming bubbles, cards */
+  --shadow-topbar: 0 2px 12px rgba(0, 0, 0, 0.05);   /* under the top nav */
+  --shadow-sidebar: 2px 0 16px rgba(0, 0, 0, 0.15);  /* stronger: sidebar is dark */
+  --shadow-composer: 0 4px 18px rgba(0, 0, 0, 0.07); /* composer bar */
+  --shadow-bubble-out: 0 4px 12px rgba(29, 74, 69, 0.3); /* spruce-tinted */
+  --shadow-avatar: 0 3px 8px rgba(0, 0, 0, 0.25);    /* avatars on dark */
+  --shadow-cta: 0 4px 12px oklch(0.5 0.12 25 / 0.4); /* coral buttons */
 }
 
 body {

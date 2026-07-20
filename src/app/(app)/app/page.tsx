@@ -104,6 +104,9 @@ export default async function AppPage({
       extraParticipants: Math.max(0, participants.length - 1),
       snippet: snippetByThread.get(t.id) ?? "",
       lastMessageAt: t.last_message_at,
+      // Read/unread isn't tracked in the schema yet; the rail's unread styling
+      // is in place and will light up once that data exists.
+      unread: false,
     };
   });
 

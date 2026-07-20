@@ -22,7 +22,11 @@ export interface PaneThread {
 }
 
 /**
- * Right reading pane: contact header, day dividers, and message bubbles.
+ * Right reading pane: contact header, day dividers, and chat bubbles.
+ *
+ * Bubbles carry an asymmetric radius so each has a "tail" on the side it came
+ * from, and a soft shadow — outgoing ones tinted spruce to match their fill.
+ * Timestamps sit just outside the bubble, per the design reference.
  *
  * Body rendering deliberately never injects `body_html` — it's untrusted remote
  * content, and the MVP plan calls for stripping images/signatures before display.
@@ -57,103 +61,97 @@ export function ReadingPane({
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-reading-pane">
       {/* Header */}
-      <div className="flex items-center gap-3 border-b border-black/[0.06] bg-cream px-5 py-3">
+      <div className="flex h-[76px] shrink-0 items-center gap-3.5 border-b border-black/[0.06] bg-cream px-7 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
         <Avatar
           address={thread.primaryAddress}
           label={thread.label}
-          size={40}
+          size={44}
         />
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="truncate font-display text-[17px] font-bold text-text-body">
             {thread.label}
           </h2>
-          <p className="truncate text-xs text-text-muted">
+          <p className="truncate text-[13px] text-[#8a8375]">
             {thread.participants.join(", ")}
           </p>
         </div>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-10 py-7">
         {messages.length === 0 ? (
           <p className="text-center text-sm text-text-muted">
             No messages in this conversation yet.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2">
-            {messages.map((msg) => {
-              const showDivider = showDividerFor.has(msg.id);
+          messages.map((msg) => (
+            <div key={msg.id} className="contents">
+              {showDividerFor.has(msg.id) && (
+                <div className="self-center rounded-full bg-divider-bg px-3.5 py-[5px] text-xs font-extrabold tracking-[0.3px] text-divider-text">
+                  {dayDividerLabel(msg.sentAt)}
+                </div>
+              )}
 
-              return (
-                <li key={msg.id}>
-                  {showDivider && (
-                    <div className="my-3 flex justify-center">
-                      <span className="rounded-full bg-black/[0.05] px-3 py-1 text-[11px] font-bold tracking-wide text-text-muted">
-                        {dayDividerLabel(msg.sentAt)}
-                      </span>
-                    </div>
-                  )}
+              <div
+                className={`flex max-w-[62%] flex-col gap-1 ${
+                  msg.outgoing
+                    ? "items-end self-end"
+                    : "items-start self-start"
+                }`}
+              >
+                <div
+                  className={
+                    msg.outgoing
+                      ? "rounded-[16px_16px_4px_16px] bg-spruce px-4 py-3 text-[15px] font-medium leading-[1.45] text-white shadow-[0_4px_12px_rgba(29,74,69,0.3)]"
+                      : "rounded-[4px_16px_16px_16px] border border-black/[0.06] bg-bubble-incoming px-4 py-3 text-[15px] font-medium leading-[1.45] text-text-body shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
+                  }
+                >
+                  <p className="whitespace-pre-wrap break-words">
+                    {msg.body ?? msg.snippet ?? ""}
+                  </p>
 
-                  <div
-                    className={`flex ${msg.outgoing ? "justify-end" : "justify-start"}`}
-                  >
-                    <div
-                      className={
-                        msg.outgoing
-                          ? "max-w-[62%] rounded-[16px_16px_4px_16px] bg-spruce px-3.5 py-2.5 text-white shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
-                          : "max-w-[62%] rounded-[4px_16px_16px_16px] border border-black/[0.06] bg-bubble-incoming px-3.5 py-2.5 text-text-body shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
-                      }
+                  {msg.htmlOnly && (
+                    <p
+                      className={`mt-2 text-[11px] ${
+                        msg.outgoing ? "text-white/60" : "text-text-muted-3"
+                      }`}
                     >
-                      <p className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">
-                        {msg.body ?? msg.snippet ?? ""}
-                      </p>
+                      HTML email — preview only
+                    </p>
+                  )}
+                </div>
 
-                      {msg.htmlOnly && (
-                        <p
-                          className={`mt-1.5 text-[11px] ${
-                            msg.outgoing ? "text-white/60" : "text-text-muted-3"
-                          }`}
-                        >
-                          HTML email — preview only
-                        </p>
-                      )}
-
-                      <p
-                        className={`mt-1 text-right text-[11px] ${
-                          msg.outgoing ? "text-white/55" : "text-text-muted-3"
-                        }`}
-                      >
-                        {bubbleTime(msg.sentAt)}
-                      </p>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                <span className="px-1 text-[11.5px] text-text-muted-3">
+                  {bubbleTime(msg.sentAt)}
+                </span>
+              </div>
+            </div>
+          ))
         )}
       </div>
 
       {/* Composer — intentionally inert: reply/send is a later step. */}
-      <div className="border-t border-black/[0.06] bg-cream px-5 py-3">
-        <div className="flex items-center gap-2">
-          <div
-            className="flex-1 rounded-full bg-black/[0.04] px-4 py-2.5 text-sm text-text-muted-3"
+      <div className="shrink-0 px-8 pb-6 pt-4">
+        <div className="flex items-end gap-2.5 rounded-[22px] border border-black/[0.06] bg-white py-2.5 pl-[18px] pr-3 shadow-[0_4px_18px_rgba(0,0,0,0.07)]">
+          <span
+            className="flex-1 py-1.5 text-[14.5px] font-semibold text-[#a39c8c]"
             aria-disabled
             title="Replying arrives in a later step"
           >
             Replying isn’t wired up yet
-          </div>
+          </span>
           <button
             type="button"
             disabled
             aria-label="Send (coming soon)"
             title="Replying arrives in a later step"
-            className="flex h-10 w-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full bg-coral/50 text-white"
+            className="flex h-10 w-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full bg-coral text-white opacity-60 shadow-[0_3px_10px_oklch(0.5_0.12_25_/_0.35)]"
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden>
-              <path d="M1 8l14-6-6 14-2-6-6-2z" fill="currentColor" />
-            </svg>
+            {/* Paper-plane triangle, matching the design reference. */}
+            <span
+              aria-hidden
+              className="ml-0.5 h-0 w-0 border-y-[6px] border-l-[9px] border-y-transparent border-l-white"
+            />
           </button>
         </div>
       </div>

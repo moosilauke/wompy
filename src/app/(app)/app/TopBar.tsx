@@ -1,4 +1,5 @@
-import Link from "next/link";
+"use client";
+
 import { signOut } from "../actions";
 import { SyncPoller } from "./SyncPoller";
 import type { ContactTab } from "@/lib/types";
@@ -24,10 +25,12 @@ export function TopBar({
   userEmail,
   activeTab,
   counts,
+  onSelectTab,
 }: {
   userEmail: string | null;
   activeTab: ContactTab;
   counts: Record<ContactTab, number>;
+  onSelectTab: (tab: ContactTab) => void;
 }) {
   return (
     <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
@@ -46,9 +49,10 @@ export function TopBar({
           {TABS.map((tab) => {
             const active = tab.id === activeTab;
             return (
-              <Link
+              <button
                 key={tab.id}
-                href={`/app?tab=${tab.id}`}
+                type="button"
+                onClick={() => onSelectTab(tab.id)}
                 aria-current={active ? "page" : undefined}
                 className={`rounded-[10px] px-[13px] py-[7px] text-[13px] font-bold transition-colors ${
                   active
@@ -60,7 +64,7 @@ export function TopBar({
                 <span className="ml-1.5 font-semibold opacity-70">
                   {counts[tab.id]}
                 </span>
-              </Link>
+              </button>
             );
           })}
         </nav>

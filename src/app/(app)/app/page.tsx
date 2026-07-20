@@ -3,8 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { canonicalAddress, parseAddress } from "@/lib/email/addresses";
 import { normalizeSnippet } from "@/lib/email/text";
-import { TopBar } from "./TopBar";
-import { ContactRail, type RailThread } from "./ContactRail";
+import { AppShell } from "./AppShell";
+import { type RailThread } from "./ContactRail";
 import {
   ReadingPane,
   type PaneMessage,
@@ -125,8 +125,6 @@ export default async function AppPage({
     spam: allThreads.filter((t) => t.tab === "spam").length,
   };
 
-  const threads = allThreads.filter((t) => t.tab === activeTab);
-
   const nameByAddress = new Map<string, string | null>(
     (contactRows ?? []).map((c) => {
       const row = c as { address: string; display_name: string | null };
@@ -156,7 +154,7 @@ export default async function AppPage({
       label: c.display_name || c.address.split("@")[0] || c.address,
     }));
 
-  const railThreads: RailThread[] = threads.map((t) => {
+  const toRailThread = (t: (typeof allThreads)[number]): RailThread => {
     const participants = t.participant_set ?? [];
     const primary = participants[0] ?? "";
     return {
@@ -170,7 +168,22 @@ export default async function AppPage({
       // is in place and will light up once that data exists.
       unread: false,
     };
-  });
+  };
+
+  // Rail data for every tab, not just the active one.
+  //
+  // The server already loads all threads on each render (the tab counts need
+  // them), so sending all three lists costs one extra pass over data we hold
+  // anyway — and lets the client switch tabs without a server round-trip.
+  // Previously a tab switch re-fetched identical data just to filter it
+  // differently.
+  const railByTab: Record<ContactTab, RailThread[]> = {
+    contact: allThreads.filter((t) => t.tab === "contact").map(toRailThread),
+    company: allThreads.filter((t) => t.tab === "company").map(toRailThread),
+    spam: allThreads.filter((t) => t.tab === "spam").map(toRailThread),
+  };
+
+  const threads = allThreads.filter((t) => t.tab === activeTab);
 
   // Resolve the selected thread (default: most recent).
   const selected =
@@ -242,19 +255,14 @@ export default async function AppPage({
 
   return (
     <ToastProvider>
-    <div className="flex h-screen flex-col overflow-hidden">
-      <TopBar
+      <AppShell
         userEmail={userEmail}
-        activeTab={activeTab}
+        initialTab={activeTab}
         counts={counts}
-      />
-      <div className="flex min-h-0 flex-1">
-        <ContactRail
-          threads={railThreads}
-          selectedId={selected?.id ?? null}
-          activeTab={activeTab}
-          contactSuggestions={contactSuggestions}
-        />
+        railByTab={railByTab}
+        selectedId={selected?.id ?? null}
+        contactSuggestions={contactSuggestions}
+      >
         {/* Spam uses the classic list view too — you skim it for false
             positives, you don't hold conversations in it. */}
         {activeTab === "contact" ? (
@@ -266,8 +274,7 @@ export default async function AppPage({
             isSpam={activeTab === "spam"}
           />
         )}
-      </div>
-    </div>
+      </AppShell>
     </ToastProvider>
   );
 }

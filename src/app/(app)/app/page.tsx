@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
-import { parseAddress } from "@/lib/email/addresses";
+import { canonicalAddress, parseAddress } from "@/lib/email/addresses";
+import { normalizeSnippet } from "@/lib/email/text";
 import { TopBar } from "./TopBar";
 import { ContactRail, type RailThread } from "./ContactRail";
 import {
@@ -49,9 +50,39 @@ export default async function AppPage({
   const { data: accounts } = await supabase
     .from("email_accounts")
     .select("email");
+  // Canonicalized so `Kevincole@`, `kevin.cole@`, and `kevincole+tag@` all match
+  // the connected account.
   const selfAddresses = new Set(
-    (accounts ?? []).map((a) => (a as { email: string }).email.toLowerCase()),
+    (accounts ?? []).map((a) =>
+      canonicalAddress((a as { email: string }).email),
+    ),
   );
+
+  // Latest surviving message per thread. Fetched before the threads are
+  // filtered because it decides which threads exist at all: deleting the last
+  // message in a conversation must remove it from the rail, not leave an empty
+  // row behind. `trashed_at is null` is what makes that true.
+  const { data: recentRows } = await supabase
+    .from("messages")
+    .select("thread_id, snippet, body_text, internal_date")
+    .not("thread_id", "is", null)
+    .is("trashed_at", null)
+    .order("internal_date", { ascending: false })
+    .limit(400);
+
+  const snippetByThread = new Map<string, string>();
+  for (const row of (recentRows ?? []) as {
+    thread_id: string;
+    snippet: string | null;
+    body_text: string | null;
+  }[]) {
+    if (!snippetByThread.has(row.thread_id)) {
+      // Decoded here as well as at ingest, so rows synced before the fix (and
+      // any provider that escapes differently) still render clean text.
+      const preview = normalizeSnippet(row.snippet || row.body_text) ?? "";
+      snippetByThread.set(row.thread_id, preview);
+    }
+  }
 
   // All threads, newest activity first. Fetched together so the tab counts are
   // accurate without a second round-trip.
@@ -60,13 +91,15 @@ export default async function AppPage({
     .select("id, participant_set, last_message_at, tab")
     .order("last_message_at", { ascending: false, nullsFirst: false });
 
-  const allThreads = (threadRows ?? []) as {
+  const allThreads = ((threadRows ?? []) as {
     id: string;
     participant_set: string[];
     last_message_at: string | null;
     tab: ContactTab;
-  }[];
+  }[]).filter((t) => snippetByThread.has(t.id));
 
+  // Counts are derived from the same filtered list, so a tab badge never
+  // promises conversations the rail won't show.
   const counts: Record<ContactTab, number> = {
     contact: allThreads.filter((t) => t.tab === "contact").length,
     company: allThreads.filter((t) => t.tab === "company").length,
@@ -107,27 +140,6 @@ export default async function AppPage({
       address: c.address,
       label: c.display_name || c.address.split("@")[0] || c.address,
     }));
-
-  // Latest message per thread, for the rail snippets.
-  const { data: recentRows } = await supabase
-    .from("messages")
-    .select("thread_id, snippet, body_text, internal_date")
-    .not("thread_id", "is", null)
-    .is("trashed_at", null)
-    .order("internal_date", { ascending: false })
-    .limit(400);
-
-  const snippetByThread = new Map<string, string>();
-  for (const row of (recentRows ?? []) as {
-    thread_id: string;
-    snippet: string | null;
-    body_text: string | null;
-  }[]) {
-    if (!snippetByThread.has(row.thread_id)) {
-      const preview = (row.snippet || row.body_text || "").replace(/\s+/g, " ");
-      snippetByThread.set(row.thread_id, preview.trim());
-    }
-  }
 
   const railThreads: RailThread[] = threads.map((t) => {
     const participants = t.participant_set ?? [];
@@ -190,13 +202,13 @@ export default async function AppPage({
         const from = parseAddress(m.from_address);
         return {
           id: m.id,
-          // The SENT label is authoritative; fall back to matching the address
-          // for rows synced before labels were captured.
-          outgoing:
-            (m.label_ids ?? []).includes("SENT") ||
-            (from ? selfAddresses.has(from.address) : false),
+          // The From address is the only reliable signal for "did I write this".
+          // Gmail's SENT label is deliberately NOT consulted: when you correspond
+          // with your own other accounts, it returns SENT on inbound messages
+          // too, which made every bubble render as outgoing.
+          outgoing: from ? selfAddresses.has(canonicalAddress(from.address)) : false,
           body: m.body_text,
-          snippet: m.snippet,
+          snippet: normalizeSnippet(m.snippet),
           htmlOnly: !m.body_text && !!m.body_html,
           sentAt: m.internal_date,
         };
@@ -206,7 +218,7 @@ export default async function AppPage({
         id: m.id,
         subject: m.subject,
         body: m.body_text,
-        snippet: m.snippet,
+        snippet: normalizeSnippet(m.snippet),
         htmlOnly: !m.body_text && !!m.body_html,
         sentAt: m.internal_date,
       }));

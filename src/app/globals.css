@@ -96,3 +96,23 @@ body {
   color: var(--text-body);
   font-family: var(--font-body), "Nunito", system-ui, sans-serif;
 }
+
+/*
+ * Tailwind v4's preflight sets `cursor: default` on buttons (a change from v3),
+ * which makes every control in the app feel inert. Restore the pointer globally
+ * rather than adding `cursor-pointer` per button — one rule covers components we
+ * haven't written yet. Disabled controls keep the not-allowed cursor.
+ */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  label[for],
+  summary {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+}

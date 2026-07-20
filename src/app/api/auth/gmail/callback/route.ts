@@ -36,17 +36,31 @@ export async function GET(request: Request) {
     return redirect("gmail=error&reason=auth_mismatch");
   }
 
-  // Exchange the code for tokens.
-  const oauth = createOAuthClient();
-  const { tokens } = await oauth.getToken(code);
+  // Each step below can throw (network failure, revoked consent, missing DB
+  // tables). Surface a readable reason instead of letting it bubble up as an
+  // opaque 500 — an unapplied migration used to fail exactly this way.
+  try {
+    // Exchange the code for tokens.
+    const oauth = createOAuthClient();
+    const { tokens } = await oauth.getToken(code);
 
-  // Read the connected account's email address.
-  const email = await fetchGmailAddress(tokens);
-  if (!email) return redirect("gmail=error&reason=no_email");
+    // Read the connected account's email address.
+    const email = await fetchGmailAddress(tokens);
+    if (!email) return redirect("gmail=error&reason=no_email");
 
-  // Persist via the shared upsert (same write path as Google-auth signup).
-  const { error } = await upsertGoogleTokensForUser(user.id, email, tokens);
-  if (error) return redirect("gmail=error&reason=save_failed");
+    // Persist via the shared upsert (same write path as Google-auth signup).
+    const { error } = await upsertGoogleTokensForUser(user.id, email, tokens);
+    if (error) {
+      return redirect(
+        `gmail=error&reason=save_failed&detail=${encodeURIComponent(error)}`,
+      );
+    }
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : "unknown";
+    return redirect(
+      `gmail=error&reason=connect_failed&detail=${encodeURIComponent(detail)}`,
+    );
+  }
 
   return redirect("gmail=connected");
 }

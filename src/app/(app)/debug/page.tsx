@@ -13,22 +13,41 @@ import type { EmailAccount, MessageRow } from "@/lib/types";
  * Reads go through the RLS-scoped server client, so this only ever shows the
  * signed-in user's own data.
  */
-export default async function DebugPage() {
+// Per-request data (session cookies + searchParams) — never prerender this.
+export const dynamic = "force-dynamic";
+
+export default async function DebugPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   // Not configured yet → the proxy can't gate this route, so guard here.
   if (!isSupabaseConfigured) redirect("/login");
 
+  // Connect-Gmail outcome, passed back by the OAuth callback.
+  const params = await searchParams;
+  const first = (v: string | string[] | undefined) =>
+    Array.isArray(v) ? v[0] : v;
+  const gmailStatus = first(params.gmail);
+  const gmailReason = first(params.reason);
+  const gmailDetail = first(params.detail);
+
   const supabase = await createClient();
 
-  const { data: accounts } = await supabase
+  const { data: accounts, error: accountsError } = await supabase
     .from("email_accounts")
     .select("id, provider, email, last_synced_at, refresh_token")
     .order("created_at", { ascending: true });
 
-  const { data: messages } = await supabase
+  const { data: messages, error: messagesError } = await supabase
     .from("messages")
     .select("id, from_address, subject, snippet, internal_date, raw_headers")
     .order("internal_date", { ascending: false })
     .limit(50);
+
+  // Surface query failures (e.g. migrations not applied) instead of rendering an
+  // empty list that looks like "nothing connected yet".
+  const dbError = accountsError ?? messagesError;
 
   const accountList = (accounts ?? []) as Pick<
     EmailAccount,
@@ -47,6 +66,34 @@ export default async function DebugPage() {
           Backend-foundation scaffolding. Not the real UI.
         </p>
       </header>
+
+      {gmailStatus === "connected" && (
+        <p className="rounded-[14px] bg-mint/25 px-4 py-3 text-sm font-semibold text-spruce">
+          Gmail connected.
+        </p>
+      )}
+
+      {gmailStatus === "error" && (
+        <div className="rounded-[14px] bg-coral/15 px-4 py-3 text-sm">
+          <p className="font-bold text-coral">
+            Couldn’t connect Gmail{gmailReason ? `: ${gmailReason}` : "."}
+          </p>
+          {gmailDetail && (
+            <p className="mt-1 break-words text-text-muted">{gmailDetail}</p>
+          )}
+        </div>
+      )}
+
+      {dbError && (
+        <div className="rounded-[14px] bg-coral/15 px-4 py-3 text-sm">
+          <p className="font-bold text-coral">Database query failed</p>
+          <p className="mt-1 break-words text-text-muted">{dbError.message}</p>
+          <p className="mt-1 text-text-muted">
+            If the tables are missing, apply the migrations in{" "}
+            <code className="rounded bg-black/5 px-1">supabase/migrations/</code>.
+          </p>
+        </div>
+      )}
 
       <DebugActions signOutAction={signOut} />
 

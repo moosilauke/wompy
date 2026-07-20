@@ -35,6 +35,10 @@ yarn-error.log*
 # ...but keep the safe, placeholder-only template tracked.
 !.env.example
 
+# Claude Code local settings (machine-specific absolute paths).
+# Note: .mcp.json IS tracked — it's shared project config with no secrets.
+.claude/
+
 # vercel
 .vercel
 

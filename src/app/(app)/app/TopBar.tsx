@@ -1,16 +1,31 @@
+import Link from "next/link";
 import { signOut } from "../actions";
 import { SyncPoller } from "./SyncPoller";
+import type { ContactTab } from "@/lib/types";
 
-/** Nav tabs from the design spec. Inert until the classifier lands — the
- * Contact/Company split is what makes them meaningful. */
-const TABS = ["All", "Personal", "Work", "Promotions"] as const;
+/**
+ * The two-tab split is the product's primary navigation, not a filter bolted
+ * onto one inbox: Contacts get the chat view, Companies get a classic list.
+ */
+const TABS: { id: ContactTab; label: string }[] = [
+  { id: "contact", label: "Contacts" },
+  { id: "company", label: "Companies" },
+];
 
 /**
  * Top bar: 64px of spruce, flush against the sidebar below it (same color, no
  * seam). Mint is reserved for the logo mark and the active-tab chip; coral does
  * the primary-action job on the right.
  */
-export function TopBar({ userEmail }: { userEmail: string | null }) {
+export function TopBar({
+  userEmail,
+  activeTab,
+  counts,
+}: {
+  userEmail: string | null;
+  activeTab: ContactTab;
+  counts: Record<ContactTab, number>;
+}) {
   return (
     <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
       <div className="flex items-center gap-7">
@@ -24,21 +39,27 @@ export function TopBar({ userEmail }: { userEmail: string | null }) {
           </span>
         </div>
 
-        <nav className="hidden items-center gap-1 sm:flex">
-          {TABS.map((tab, i) => (
-            <span
-              key={tab}
-              aria-disabled
-              title="Filtering arrives with the Contact/Company classifier"
-              className={`cursor-default rounded-[10px] px-[13px] py-[7px] text-[13px] font-bold ${
-                i === 0
-                  ? "bg-[oklch(0.8_0.13_175_/_0.25)] text-white"
-                  : "text-on-spruce-muted"
-              }`}
-            >
-              {tab}
-            </span>
-          ))}
+        <nav className="flex items-center gap-1">
+          {TABS.map((tab) => {
+            const active = tab.id === activeTab;
+            return (
+              <Link
+                key={tab.id}
+                href={`/app?tab=${tab.id}`}
+                aria-current={active ? "page" : undefined}
+                className={`rounded-[10px] px-[13px] py-[7px] text-[13px] font-bold transition-colors ${
+                  active
+                    ? "bg-[oklch(0.8_0.13_175_/_0.25)] text-white"
+                    : "text-on-spruce-muted hover:text-white"
+                }`}
+              >
+                {tab.label}
+                <span className="ml-1.5 font-semibold opacity-70">
+                  {counts[tab.id]}
+                </span>
+              </Link>
+            );
+          })}
         </nav>
       </div>
 

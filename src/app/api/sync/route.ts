@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncAccount } from "@/lib/gmail/sync";
 import { backfillThreadsForUser } from "@/lib/email/threading";
+import { classifyUserMail } from "@/lib/email/classify-run";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { EmailAccount } from "@/lib/types";
 
@@ -67,5 +68,16 @@ export async function POST() {
     };
   }
 
-  return NextResponse.json({ results, backfill });
+  // Classify senders into Contact/Company and derive each thread's tab. Runs
+  // after threading so every contact row exists; respects manual overrides.
+  let classification = null;
+  try {
+    classification = await classifyUserMail(user.id);
+  } catch (err) {
+    classification = {
+      error: err instanceof Error ? err.message : "classify_failed",
+    };
+  }
+
+  return NextResponse.json({ results, backfill, classification });
 }

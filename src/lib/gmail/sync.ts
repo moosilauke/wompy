@@ -40,7 +40,12 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     ? new Date(account.last_synced_at)
     : new Date();
   const afterEpoch = Math.floor(sinceDate.getTime() / 1000);
-  const query = `after:${afterEpoch}`;
+  // `in:anywhere` makes Gmail include SENT (and archived) mail, which a default
+  // search omits. We need sent mail for two reasons: the classifier's
+  // reply-reciprocity rule ("if you ever replied, they're a Contact") can only
+  // fire if replies are stored, and the chat view can't show your own side of a
+  // conversation without them.
+  const query = `in:anywhere after:${afterEpoch}`;
 
   // 1. List message ids matching the query (paginated, capped).
   const ids: string[] = [];
@@ -131,6 +136,8 @@ function mapMessageToRow(
     email_account_id: account.id,
     gmail_message_id: msg.id!,
     gmail_thread_id: msg.threadId ?? null,
+    // Gmail's labels — SENT is what tells us a message is ours.
+    label_ids: msg.labelIds ?? [],
     from_address: headers["from"] ?? null,
     to_addresses: splitAddresses(headers["to"]),
     cc_addresses: splitAddresses(headers["cc"]),

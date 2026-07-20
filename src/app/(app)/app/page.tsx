@@ -9,6 +9,8 @@ import {
   type PaneMessage,
   type PaneThread,
 } from "./ReadingPane";
+import { CompanyPane, type CompanyMessage } from "./CompanyPane";
+import type { ContactTab } from "@/lib/types";
 
 /**
  * The authenticated app shell: contact rail + reading pane, per the design spec.
@@ -35,10 +37,11 @@ export default async function AppPage({
   if (!user) redirect("/login");
 
   const params = await searchParams;
-  const rawThreadParam = params.thread;
-  const requestedThreadId = Array.isArray(rawThreadParam)
-    ? rawThreadParam[0]
-    : rawThreadParam;
+  const first = (v: string | string[] | undefined) =>
+    Array.isArray(v) ? v[0] : v;
+  const requestedThreadId = first(params.thread);
+  const activeTab: ContactTab =
+    first(params.tab) === "company" ? "company" : "contact";
 
   // Connected inbox addresses — used to decide which bubbles are "mine".
   const { data: accounts } = await supabase
@@ -48,17 +51,26 @@ export default async function AppPage({
     (accounts ?? []).map((a) => (a as { email: string }).email.toLowerCase()),
   );
 
-  // Threads, newest activity first.
+  // All threads, newest activity first. Fetched together so the tab counts are
+  // accurate without a second round-trip.
   const { data: threadRows } = await supabase
     .from("threads")
-    .select("id, participant_set, last_message_at")
+    .select("id, participant_set, last_message_at, tab")
     .order("last_message_at", { ascending: false, nullsFirst: false });
 
-  const threads = (threadRows ?? []) as {
+  const allThreads = (threadRows ?? []) as {
     id: string;
     participant_set: string[];
     last_message_at: string | null;
+    tab: ContactTab;
   }[];
+
+  const counts: Record<ContactTab, number> = {
+    contact: allThreads.filter((t) => t.tab === "contact").length,
+    company: allThreads.filter((t) => t.tab === "company").length,
+  };
+
+  const threads = allThreads.filter((t) => t.tab === activeTab);
 
   // Display names for participants, gathered during threading.
   const { data: contactRows } = await supabase
@@ -116,6 +128,7 @@ export default async function AppPage({
 
   let paneThread: PaneThread | null = null;
   let paneMessages: PaneMessage[] = [];
+  let companyMessages: CompanyMessage[] = [];
 
   if (selected) {
     const participants = selected.participant_set ?? [];
@@ -129,37 +142,70 @@ export default async function AppPage({
 
     const { data: messageRows } = await supabase
       .from("messages")
-      .select("id, from_address, body_text, body_html, snippet, internal_date")
+      .select(
+        "id, from_address, subject, body_text, body_html, snippet, internal_date, label_ids",
+      )
       .eq("thread_id", selected.id)
-      .order("internal_date", { ascending: true })
+      .order("internal_date", { ascending: activeTab === "contact" })
       .limit(200);
 
-    paneMessages = ((messageRows ?? []) as {
+    const rows = (messageRows ?? []) as {
       id: string;
       from_address: string | null;
+      subject: string | null;
       body_text: string | null;
       body_html: string | null;
       snippet: string | null;
       internal_date: string | null;
-    }[]).map((m) => {
-      const from = parseAddress(m.from_address);
-      return {
+      label_ids: string[] | null;
+    }[];
+
+    if (activeTab === "contact") {
+      paneMessages = rows.map((m) => {
+        const from = parseAddress(m.from_address);
+        return {
+          id: m.id,
+          // The SENT label is authoritative; fall back to matching the address
+          // for rows synced before labels were captured.
+          outgoing:
+            (m.label_ids ?? []).includes("SENT") ||
+            (from ? selfAddresses.has(from.address) : false),
+          body: m.body_text,
+          snippet: m.snippet,
+          htmlOnly: !m.body_text && !!m.body_html,
+          sentAt: m.internal_date,
+        };
+      });
+    } else {
+      companyMessages = rows.map((m) => ({
         id: m.id,
-        outgoing: from ? selfAddresses.has(from.address) : false,
+        subject: m.subject,
         body: m.body_text,
         snippet: m.snippet,
         htmlOnly: !m.body_text && !!m.body_html,
         sentAt: m.internal_date,
-      };
-    });
+      }));
+    }
   }
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <TopBar userEmail={user.email ?? null} />
+      <TopBar
+        userEmail={user.email ?? null}
+        activeTab={activeTab}
+        counts={counts}
+      />
       <div className="flex min-h-0 flex-1">
-        <ContactRail threads={railThreads} selectedId={selected?.id ?? null} />
-        <ReadingPane thread={paneThread} messages={paneMessages} />
+        <ContactRail
+          threads={railThreads}
+          selectedId={selected?.id ?? null}
+          activeTab={activeTab}
+        />
+        {activeTab === "contact" ? (
+          <ReadingPane thread={paneThread} messages={paneMessages} />
+        ) : (
+          <CompanyPane thread={paneThread} messages={companyMessages} />
+        )}
       </div>
     </div>
   );

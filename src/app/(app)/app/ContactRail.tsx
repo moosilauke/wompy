@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Avatar } from "./Avatar";
 import { railTimestamp } from "@/lib/format";
+import type { ContactTab } from "@/lib/types";
 
 export interface RailThread {
   id: string;
@@ -27,9 +28,11 @@ export interface RailThread {
 export function ContactRail({
   threads,
   selectedId,
+  activeTab,
 }: {
   threads: RailThread[];
   selectedId: string | null;
+  activeTab: ContactTab;
 }) {
   return (
     <aside className="flex w-[320px] shrink-0 flex-col border-r border-spruce-edge bg-spruce shadow-[2px_0_16px_rgba(0,0,0,0.15)]">
@@ -49,7 +52,9 @@ export function ContactRail({
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4">
         {threads.length === 0 ? (
           <p className="px-3 py-6 text-sm text-on-spruce-muted">
-            No conversations yet. New mail will appear here after it syncs.
+            {activeTab === "contact"
+              ? "No conversations yet. Mail from real people lands here — reply to someone, or email yourself to test."
+              : "Nothing here yet. Newsletters, receipts, and other one-way mail land here."}
           </p>
         ) : (
           <ul className="flex flex-col gap-0.5">
@@ -58,7 +63,7 @@ export function ContactRail({
               return (
                 <li key={thread.id}>
                   <Link
-                    href={`/app?thread=${thread.id}`}
+                    href={`/app?tab=${activeTab}&thread=${thread.id}`}
                     aria-current={active ? "true" : undefined}
                     className={`flex items-center gap-[11px] rounded-xl p-2.5 transition-colors ${
                       active

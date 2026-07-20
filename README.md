@@ -89,16 +89,17 @@ Note: sync starts fresh from when you connect — no historical mail is imported
 
 ## Scripts
 
-- `npm run dev` — dev server (webpack). See note below.
-- `npm run dev:turbo` — dev server with Turbopack
+- `npm run dev` — dev server (Turbopack)
+- `npm run dev:webpack` — dev server with webpack. See note below.
 - `npm run build` — production build (Turbopack)
 - `npm run typecheck` — `tsc --noEmit`
 - `npm run lint` — ESLint
 
-> **Dev bundler note:** `npm run dev` uses webpack because Turbopack's dev-mode
-> PostCSS worker was crashing on this Windows setup (exit `0xc0000142`) while
-> compiling `globals.css`. The production build (`npm run build`) uses Turbopack
-> and works fine. If Turbopack dev works on your machine, use `npm run dev:turbo`.
+> **Dev bundler note:** `npm run dev` uses Turbopack, which is noticeably faster.
+> It previously crashed on this Windows setup (PostCSS worker, exit `0xc0000142`,
+> while compiling `globals.css`), which is why webpack was the default for a
+> while; that no longer reproduces. If the crash comes back, fall back to
+> `npm run dev:webpack`.
 
 ## Before configuring credentials
 

@@ -45,7 +45,7 @@ function AuthFormFields({ mode }: { mode: Mode }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const next = searchParams.get("next") || "/debug";
+  const next = searchParams.get("next") || "/app";
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

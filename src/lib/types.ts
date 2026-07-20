@@ -3,6 +3,29 @@
 
 export type ContactTab = "contact" | "company";
 
+export interface ThreadRow {
+  id: string;
+  user_id: string;
+  participant_set: string[];
+  participant_key: string;
+  tab: ContactTab;
+  last_message_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactRow {
+  id: string;
+  user_id: string;
+  address: string;
+  display_name: string | null;
+  tab: ContactTab;
+  manually_overridden: boolean;
+  classification_signals: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Provider of a connected inbox. Matches the `email_provider` enum in the DB. */
 export type EmailProvider = "gmail" | "yahoo";
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncAccount } from "@/lib/gmail/sync";
+import { backfillThreadsForUser } from "@/lib/email/threading";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { EmailAccount } from "@/lib/types";
 
@@ -55,5 +56,16 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({ results });
+  // Heal any messages that predate threading (or whose grouping failed midway).
+  // Idempotent and cheap — it only looks at rows with a null thread_id.
+  let backfill = null;
+  try {
+    backfill = await backfillThreadsForUser(user.id);
+  } catch (err) {
+    backfill = {
+      error: err instanceof Error ? err.message : "backfill_failed",
+    };
+  }
+
+  return NextResponse.json({ results, backfill });
 }

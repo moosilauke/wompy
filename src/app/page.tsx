@@ -16,5 +16,5 @@ export default async function Home() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  redirect(user ? "/debug" : "/login");
+  redirect(user ? "/app" : "/login");
 }

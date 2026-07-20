@@ -2,6 +2,10 @@ import "server-only";
 import { google, type gmail_v1 } from "googleapis";
 import { getAuthorizedClient } from "@/lib/gmail/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  groupMessagesIntoThreads,
+  type ThreadingResult,
+} from "@/lib/email/threading";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -22,6 +26,7 @@ export interface SyncResult {
   fetched: number;
   upserted: number;
   since: string; // ISO watermark used for this run
+  threading: ThreadingResult;
 }
 
 export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
@@ -70,17 +75,30 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     rows.push(mapMessageToRow(account, full));
   }
 
-  // 3. Upsert (idempotent). Then advance the watermark.
+  // 3. Upsert (idempotent). Select the stored rows back so threading can key
+  //    them without a second round-trip.
   let upserted = 0;
+  let threading: ThreadingResult = {
+    threadsTouched: 0,
+    messagesLinked: 0,
+    contactsTouched: 0,
+  };
+
   if (rows.length > 0) {
-    const { error, count } = await admin
+    const { data: stored, error } = await admin
       .from("messages")
-      .upsert(rows, {
-        onConflict: "email_account_id,gmail_message_id",
-        count: "exact",
-      });
+      .upsert(rows, { onConflict: "email_account_id,gmail_message_id" })
+      .select("id, from_address, to_addresses, cc_addresses, internal_date");
     if (error) throw error;
-    upserted = count ?? rows.length;
+    upserted = stored?.length ?? rows.length;
+
+    // 4. Group into participant-set threads (MVP step 3). Runs inside sync so
+    //    there's no separate trigger to remember.
+    threading = await groupMessagesIntoThreads(
+      account.user_id,
+      account.email,
+      (stored ?? []) as Parameters<typeof groupMessagesIntoThreads>[2],
+    );
   }
 
   const nowIso = new Date().toISOString();
@@ -93,6 +111,7 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     fetched: rows.length,
     upserted,
     since: sinceDate.toISOString(),
+    threading,
   };
 }
 

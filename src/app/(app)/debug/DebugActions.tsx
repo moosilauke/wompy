@@ -29,6 +29,12 @@ export function DebugActions({ signOutAction }: { signOutAction: () => void }) {
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
         <a
+          href="/app"
+          className="rounded-[100px] bg-spruce px-4 py-2 font-bold text-white"
+        >
+          Open Wompy
+        </a>
+        <a
           href="/api/auth/gmail/start"
           className="rounded-[100px] bg-mint px-4 py-2 font-bold text-spruce"
         >

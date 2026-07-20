@@ -1,4 +1,5 @@
 import { Avatar } from "./Avatar";
+import { Composer } from "./Composer";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
@@ -130,31 +131,7 @@ export function ReadingPane({
         )}
       </div>
 
-      {/* Composer — intentionally inert: reply/send is a later step. */}
-      <div className="shrink-0 px-8 pb-6 pt-4">
-        <div className="flex items-end gap-2.5 rounded-[22px] border border-black/[0.06] bg-white py-2.5 pl-[18px] pr-3 shadow-[0_4px_18px_rgba(0,0,0,0.07)]">
-          <span
-            className="flex-1 py-1.5 text-[14.5px] font-semibold text-[#a39c8c]"
-            aria-disabled
-            title="Replying arrives in a later step"
-          >
-            Replying isn’t wired up yet
-          </span>
-          <button
-            type="button"
-            disabled
-            aria-label="Send (coming soon)"
-            title="Replying arrives in a later step"
-            className="flex h-10 w-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full bg-coral text-white opacity-60 shadow-[0_3px_10px_oklch(0.5_0.12_25_/_0.35)]"
-          >
-            {/* Paper-plane triangle, matching the design reference. */}
-            <span
-              aria-hidden
-              className="ml-0.5 h-0 w-0 border-y-[6px] border-l-[9px] border-y-transparent border-l-white"
-            />
-          </button>
-        </div>
-      </div>
+      <Composer threadId={thread.id} recipientLabel={thread.label} />
     </section>
   );
 }

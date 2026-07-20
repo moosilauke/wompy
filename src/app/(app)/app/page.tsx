@@ -77,7 +77,7 @@ export default async function AppPage({
   // Display names for participants, gathered during threading.
   const { data: contactRows } = await supabase
     .from("contacts")
-    .select("address, display_name");
+    .select("address, display_name, tab");
   const nameByAddress = new Map<string, string | null>(
     (contactRows ?? []).map((c) => {
       const row = c as { address: string; display_name: string | null };
@@ -87,6 +87,25 @@ export default async function AppPage({
 
   const labelFor = (address: string) =>
     nameByAddress.get(address) || address.split("@")[0] || address;
+
+  // Suggestions for the net-new compose combobox. Contacts first (real people),
+  // then everyone else, so the most likely recipients surface at the top.
+  const contactSuggestions = ((contactRows ?? []) as {
+    address: string;
+    display_name: string | null;
+    tab: ContactTab;
+  }[])
+    .filter((c) => c.tab !== "spam")
+    .sort((a, b) => {
+      if (a.tab !== b.tab) return a.tab === "contact" ? -1 : 1;
+      return (a.display_name || a.address).localeCompare(
+        b.display_name || b.address,
+      );
+    })
+    .map((c) => ({
+      address: c.address,
+      label: c.display_name || c.address.split("@")[0] || c.address,
+    }));
 
   // Latest message per thread, for the rail snippets.
   const { data: recentRows } = await supabase
@@ -203,6 +222,7 @@ export default async function AppPage({
           threads={railThreads}
           selectedId={selected?.id ?? null}
           activeTab={activeTab}
+          contactSuggestions={contactSuggestions}
         />
         {/* Spam uses the classic list view too — you skim it for false
             positives, you don't hold conversations in it. */}

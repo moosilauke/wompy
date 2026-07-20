@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Avatar } from "./Avatar";
 import { railTimestamp } from "@/lib/format";
 import type { ContactTab } from "@/lib/types";
+import { NewMessageButton } from "./NewMessageButton";
+import type { ContactSuggestion } from "./NewMessage";
 
 export interface RailThread {
   id: string;
@@ -29,15 +31,19 @@ export function ContactRail({
   threads,
   selectedId,
   activeTab,
+  contactSuggestions,
 }: {
   threads: RailThread[];
   selectedId: string | null;
   activeTab: ContactTab;
+  contactSuggestions: ContactSuggestion[];
 }) {
   return (
     <aside className="flex w-[320px] shrink-0 flex-col border-r border-spruce-edge bg-spruce shadow-[2px_0_16px_rgba(0,0,0,0.15)]">
-      {/* Decorative search — real search is a later step. */}
-      <div className="px-4 pb-2.5 pt-4">
+      <div className="flex flex-col gap-2.5 px-4 pb-2.5 pt-4">
+        <NewMessageButton contacts={contactSuggestions} />
+
+        {/* Decorative search — real search is a later step. */}
         <div
           className="flex items-center gap-2 rounded-[14px] bg-spruce-raised px-3.5 py-2.5"
           aria-hidden

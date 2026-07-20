@@ -124,6 +124,45 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
 // Message -> row mapping
 // ---------------------------------------------------------------------------
 
+/**
+ * Fetch and store a single message by its Gmail id, then thread it.
+ *
+ * Used right after sending so the message appears immediately. The normal sync
+ * can't be relied on here: its `after:` watermark has second granularity and is
+ * exclusive, so a message sent within the same second as `last_synced_at` would
+ * be skipped until something else arrived.
+ */
+export async function ingestMessageById(
+  account: EmailAccount,
+  gmailMessageId: string,
+): Promise<void> {
+  const admin = createAdminClient();
+  const auth = await getAuthorizedClient(account);
+  const gmail = google.gmail({ version: "v1", auth });
+
+  const full = (
+    await gmail.users.messages.get({
+      userId: "me",
+      id: gmailMessageId,
+      format: "full",
+    })
+  ).data;
+
+  const { data: stored, error } = await admin
+    .from("messages")
+    .upsert([mapMessageToRow(account, full)], {
+      onConflict: "email_account_id,gmail_message_id",
+    })
+    .select("id, from_address, to_addresses, cc_addresses, internal_date");
+  if (error) throw error;
+
+  await groupMessagesIntoThreads(
+    account.user_id,
+    account.email,
+    (stored ?? []) as Parameters<typeof groupMessagesIntoThreads>[2],
+  );
+}
+
 function mapMessageToRow(
   account: EmailAccount,
   msg: gmail_v1.Schema$Message,

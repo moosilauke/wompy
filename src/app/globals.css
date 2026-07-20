@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/*
+ * Wompy design tokens — sourced from Claude-Design-wompy-specs.md.
+ * CSS custom properties hold the raw values; the @theme block below maps them
+ * into Tailwind v4 utilities (bg-spruce, text-coral, etc.).
+ * These are laid in now so later UI sessions (landing page, app shell) inherit
+ * them; no designed components are built yet in this backend-foundation session.
+ */
+:root {
+  /* Brand palette */
+  --spruce: oklch(0.33 0.06 190);        /* nav bar, "me" bubbles, dark pricing card, footer */
+  --mint: oklch(0.8 0.13 175);           /* logo mark, active tab, feature chips, avatar accents */
+  --coral: oklch(0.7 0.12 25);           /* primary CTAs, unread dots, "most popular" badge */
+
+  /* Backgrounds */
+  --cream: oklch(0.96 0.015 90);         /* page / sidebar background (~#fdfbf7) */
+  --reading-pane: oklch(0.965 0.014 88); /* message list background */
+  --bubble-incoming: #ffffff;            /* bubbles from other people / Wompy account */
+
+  /* Text */
+  --text-body: #2c2a24;
+  --text-muted: #6b6558;
+  --text-muted-2: #9a9789;
+  --text-muted-3: #a39c8c;
+
+  /* Per-contact avatar hues (dusty blue / sage / olive / sand / terracotta) */
+  --avatar-blue: oklch(0.76 0.09 240);
+  --avatar-sage: oklch(0.76 0.09 175);
+  --avatar-olive: oklch(0.76 0.09 100);
+  --avatar-sand: oklch(0.76 0.09 60);
+  --avatar-terracotta: oklch(0.76 0.09 25);
+
+  /* Outgoing bubble variant used in the base app shell (dusty blue) */
+  --bubble-outgoing-blue: oklch(0.72 0.1 240);
+}
+
+@theme inline {
+  --color-spruce: var(--spruce);
+  --color-mint: var(--mint);
+  --color-coral: var(--coral);
+  --color-cream: var(--cream);
+  --color-reading-pane: var(--reading-pane);
+  --color-bubble-incoming: var(--bubble-incoming);
+  --color-text-body: var(--text-body);
+  --color-text-muted: var(--text-muted);
+  --color-text-muted-2: var(--text-muted-2);
+  --color-text-muted-3: var(--text-muted-3);
+  --color-avatar-blue: var(--avatar-blue);
+  --color-avatar-sage: var(--avatar-sage);
+  --color-avatar-olive: var(--avatar-olive);
+  --color-avatar-sand: var(--avatar-sand);
+  --color-avatar-terracotta: var(--avatar-terracotta);
+  --color-bubble-outgoing-blue: var(--bubble-outgoing-blue);
+
+  /* Typography — Space Grotesk (display) / Nunito (body/UI) */
+  --font-display: var(--font-space-grotesk);
+  --font-body: var(--font-nunito);
+
+  /* Shape — asymmetric bubble radii + pill CTAs + card/input radius */
+  --radius-bubble-in: 4px 16px 16px 16px;   /* incoming: tail-left */
+  --radius-bubble-out: 16px 16px 4px 16px;  /* outgoing: tail-right */
+  --radius-card: 14px;
+  --radius-pill: 100px;
+
+  /* Shadows — soft, low-opacity only (never hard drop shadows) */
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-cta: 0 4px 14px rgba(226, 114, 90, 0.35);
+}
+
+body {
+  background: var(--cream);
+  color: var(--text-body);
+  font-family: var(--font-body), "Nunito", system-ui, sans-serif;
+}

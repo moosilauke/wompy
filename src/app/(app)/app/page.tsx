@@ -40,8 +40,9 @@ export default async function AppPage({
   const first = (v: string | string[] | undefined) =>
     Array.isArray(v) ? v[0] : v;
   const requestedThreadId = first(params.thread);
+  const tabParam = first(params.tab);
   const activeTab: ContactTab =
-    first(params.tab) === "company" ? "company" : "contact";
+    tabParam === "company" || tabParam === "spam" ? tabParam : "contact";
 
   // Connected inbox addresses — used to decide which bubbles are "mine".
   const { data: accounts } = await supabase
@@ -68,6 +69,7 @@ export default async function AppPage({
   const counts: Record<ContactTab, number> = {
     contact: allThreads.filter((t) => t.tab === "contact").length,
     company: allThreads.filter((t) => t.tab === "company").length,
+    spam: allThreads.filter((t) => t.tab === "spam").length,
   };
 
   const threads = allThreads.filter((t) => t.tab === activeTab);
@@ -147,6 +149,7 @@ export default async function AppPage({
       )
       .eq("thread_id", selected.id)
       .order("internal_date", { ascending: activeTab === "contact" })
+      // Newest-first for the list views; chronological for the chat view.
       .limit(200);
 
     const rows = (messageRows ?? []) as {
@@ -201,10 +204,16 @@ export default async function AppPage({
           selectedId={selected?.id ?? null}
           activeTab={activeTab}
         />
+        {/* Spam uses the classic list view too — you skim it for false
+            positives, you don't hold conversations in it. */}
         {activeTab === "contact" ? (
           <ReadingPane thread={paneThread} messages={paneMessages} />
         ) : (
-          <CompanyPane thread={paneThread} messages={companyMessages} />
+          <CompanyPane
+            thread={paneThread}
+            messages={companyMessages}
+            isSpam={activeTab === "spam"}
+          />
         )}
       </div>
     </div>

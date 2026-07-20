@@ -30,14 +30,18 @@ export interface CompanyThread {
 export function CompanyPane({
   thread,
   messages,
+  isSpam = false,
 }: {
   thread: CompanyThread | null;
   messages: CompanyMessage[];
+  isSpam?: boolean;
 }) {
   if (!thread) {
     return (
       <section className="flex flex-1 items-center justify-center bg-reading-pane">
-        <p className="text-sm text-text-muted">Select a sender to read.</p>
+        <p className="text-sm text-text-muted">
+          {isSpam ? "Select a sender to review." : "Select a sender to read."}
+        </p>
       </section>
     );
   }
@@ -63,6 +67,13 @@ export function CompanyPane({
 
       {/* Classic list: one card per message, subject foremost. */}
       <div className="flex-1 overflow-y-auto px-7 py-6">
+        {isSpam && (
+          <p className="mb-4 rounded-[14px] border border-coral/25 bg-coral/10 px-4 py-3 text-[13px] text-text-muted">
+            Gmail flagged this sender as spam. Nothing here is deleted — if this
+            is a false positive, replying to them in Gmail will move them to
+            Contacts on the next sync.
+          </p>
+        )}
         {messages.length === 0 ? (
           <p className="text-center text-sm text-text-muted">
             Nothing from this sender yet.

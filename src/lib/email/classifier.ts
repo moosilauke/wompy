@@ -7,11 +7,18 @@ import type { ContactTab } from "@/lib/types";
  * and side-effect free so it can be run against real synced data and tested
  * directly.
  *
- * Rules, in priority order (from wompy-mvp-plan.md):
+ * Rules, in priority order (from wompy-mvp-plan.md, plus rule 0):
+ *   0. Gmail labeled it SPAM                             -> Spam
  *   1. List-Unsubscribe or Precedence: bulk/list header  -> Company
- *   2. You have ever replied to this sender              -> Contact (OVERRIDES 1)
+ *   2. You have ever replied to this sender              -> Contact (OVERRIDES 0, 1)
  *   3. No bulk header + free-mail domain                 -> Contact
  *   4. Everything else                                   -> Company (safe default)
+ *
+ * Rule 0 uses Gmail's own spam verdict rather than our own heuristics — it's a
+ * provider signal, and reimplementing spam detection is out of scope. Spam is
+ * quarantined to its own tab, never deleted, because the verdict has false
+ * positives. Rule 2 still wins: if you have actually corresponded with someone,
+ * they are a Contact even if Gmail flagged them.
  *
  * Rule 2 is the important one: it rescues the solo contractor using a Gmail
  * address for business, or any sender whose mail looks bulk but who you're in a
@@ -59,17 +66,20 @@ export interface ClassifierInput {
   headers: Record<string, string>;
   /** True when the user has ever sent mail to this address. */
   hasReplied: boolean;
+  /** True when Gmail labeled any message from this sender as SPAM. */
+  markedSpam?: boolean;
 }
 
 export interface ClassificationSignals {
   /** Which numbered rule decided the outcome. */
-  rule: 1 | 2 | 3 | 4;
+  rule: 0 | 1 | 2 | 3 | 4;
   /** Short human-readable justification, surfaced in the debug view. */
   reason: string;
   hasListUnsubscribe: boolean;
   precedence: string | null;
   isFreeMailDomain: boolean;
   hasReplied: boolean;
+  markedSpam: boolean;
   domain: string | null;
 }
 
@@ -95,7 +105,7 @@ export function isFreeMailDomain(address: string): boolean {
  * kept for debugging and auditing why a sender landed where it did.
  */
 export function classifySender(input: ClassifierInput): Classification {
-  const { address, headers, hasReplied } = input;
+  const { address, headers, hasReplied, markedSpam = false } = input;
 
   const hasListUnsubscribe = Boolean(headers["list-unsubscribe"]);
   const precedenceRaw = headers["precedence"]?.trim().toLowerCase() ?? null;
@@ -110,10 +120,12 @@ export function classifySender(input: ClassifierInput): Classification {
     precedence: precedenceRaw,
     isFreeMailDomain: freeMail,
     hasReplied,
+    markedSpam,
     domain,
   };
 
-  // Rule 2 first in evaluation order because it overrides rule 1 outright.
+  // Rule 2 first in evaluation order because it overrides rules 0 and 1: actual
+  // correspondence beats both a bulk header and Gmail's spam verdict.
   if (hasReplied) {
     return {
       tab: "contact",
@@ -121,6 +133,18 @@ export function classifySender(input: ClassifierInput): Classification {
         ...base,
         rule: 2,
         reason: "You have replied to this sender, so they are a Contact.",
+      },
+    };
+  }
+
+  // Rule 0: trust Gmail's spam verdict. Quarantined, never deleted.
+  if (markedSpam) {
+    return {
+      tab: "spam",
+      signals: {
+        ...base,
+        rule: 0,
+        reason: "Gmail marked mail from this sender as spam.",
       },
     };
   }
@@ -169,9 +193,19 @@ export function classifySender(input: ClassifierInput): Classification {
 }
 
 /**
- * A thread belongs in Contacts when ANY participant is a Contact — a group
- * thread that includes a real person is a conversation, not a newsletter.
+ * Decide a thread's tab from its participants' classifications.
+ *
+ * Spam wins first: if any participant is spam, the whole thread is quarantined,
+ * so a spammer can't escape by adding a fake extra recipient. (That is exactly
+ * how spam reached the Contacts tab before — a forged To: address had no contact
+ * row, was treated as unknown, and dragged the thread out of quarantine.)
+ *
+ * Otherwise a thread is a Contact conversation when any participant is a known
+ * Contact. Unknown participants deliberately do NOT imply Contact — they fall
+ * through to Company, matching the plan's bias for uncertain senders.
  */
 export function tabForThread(participantTabs: ContactTab[]): ContactTab {
-  return participantTabs.some((t) => t === "contact") ? "contact" : "company";
+  if (participantTabs.some((t) => t === "spam")) return "spam";
+  if (participantTabs.some((t) => t === "contact")) return "contact";
+  return "company";
 }

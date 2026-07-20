@@ -54,7 +54,9 @@ export function ContactRail({
           <p className="px-3 py-6 text-sm text-on-spruce-muted">
             {activeTab === "contact"
               ? "No conversations yet. Mail from real people lands here — reply to someone, or email yourself to test."
-              : "Nothing here yet. Newsletters, receipts, and other one-way mail land here."}
+              : activeTab === "spam"
+                ? "No spam. Anything Gmail flags lands here for review — nothing is deleted."
+                : "Nothing here yet. Newsletters, receipts, and other one-way mail land here."}
           </p>
         ) : (
           <ul className="flex flex-col gap-0.5">

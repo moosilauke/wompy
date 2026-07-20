@@ -1,7 +1,10 @@
 /** Shared row shapes for Wompy's Supabase tables. Hand-written for now; can be
  * replaced by `supabase gen types` output once the CLI is wired up. */
 
-export type ContactTab = "contact" | "company";
+/** Matches the `contact_tab` enum in the DB. `spam` is a quarantine tab fed by
+ * Gmail's own SPAM label — never auto-deleted, since the verdict has false
+ * positives. */
+export type ContactTab = "contact" | "company" | "spam";
 
 export interface ThreadRow {
   id: string;

@@ -150,6 +150,37 @@ export async function groupMessagesIntoThreads(
 }
 
 /**
+ * Drop every thread for a user and unlink their messages, so the next backfill
+ * re-derives all participant sets from scratch.
+ *
+ * Needed when the keying logic itself changes — e.g. adding Gmail alias
+ * normalization, which means addresses previously treated as participants (the
+ * user's own dotted address) must now be excluded. Existing rows would otherwise
+ * keep their stale keys forever.
+ *
+ * Messages are untouched; only the derived grouping is rebuilt.
+ */
+export async function rebuildThreadsForUser(
+  userId: string,
+): Promise<ThreadingResult> {
+  const admin = createAdminClient();
+
+  const { error: unlinkError } = await admin
+    .from("messages")
+    .update({ thread_id: null })
+    .eq("user_id", userId);
+  if (unlinkError) throw unlinkError;
+
+  const { error: deleteError } = await admin
+    .from("threads")
+    .delete()
+    .eq("user_id", userId);
+  if (deleteError) throw deleteError;
+
+  return backfillThreadsForUser(userId);
+}
+
+/**
  * Re-derive threads for a user's messages that have no thread yet. Used to
  * backfill mail synced before threading existed, and safe to re-run.
  */

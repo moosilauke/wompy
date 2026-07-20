@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { parseAddressList } from "@/lib/email/addresses";
+import { canonicalAddress, parseAddressList } from "@/lib/email/addresses";
 import { classifySender, tabForThread } from "@/lib/email/classifier";
 import type { ContactTab } from "@/lib/types";
 
@@ -16,6 +16,7 @@ import type { ContactTab } from "@/lib/types";
  */
 
 const SENT_LABEL = "SENT";
+const SPAM_LABEL = "SPAM";
 
 export interface ClassifyRunResult {
   contactsClassified: number;
@@ -38,13 +39,18 @@ export async function classifyUserMail(
     .contains("label_ids", [SENT_LABEL]);
   if (sentError) throw sentError;
 
+  // Stored canonically so a reply sent to any alias form still matches.
   const repliedTo = new Set<string>();
   for (const row of (sentRows ?? []) as {
     to_addresses: string[] | null;
     cc_addresses: string[] | null;
   }[]) {
-    for (const p of parseAddressList(row.to_addresses)) repliedTo.add(p.address);
-    for (const p of parseAddressList(row.cc_addresses)) repliedTo.add(p.address);
+    for (const p of parseAddressList(row.to_addresses)) {
+      repliedTo.add(canonicalAddress(p.address));
+    }
+    for (const p of parseAddressList(row.cc_addresses)) {
+      repliedTo.add(canonicalAddress(p.address));
+    }
   }
 
   // 2. Merge the headers seen from each sender. A sender is judged on the union
@@ -56,15 +62,19 @@ export async function classifyUserMail(
   if (receivedError) throw receivedError;
 
   const headersByAddress = new Map<string, Record<string, string>>();
+  const spamAddresses = new Set<string>();
   for (const row of (received ?? []) as {
     from_address: string | null;
     raw_headers: Record<string, string>;
     label_ids: string[] | null;
   }[]) {
+    const labels = row.label_ids ?? [];
     // Skip our own sent mail when judging senders.
-    if ((row.label_ids ?? []).includes(SENT_LABEL)) continue;
+    if (labels.includes(SENT_LABEL)) continue;
     const [parsed] = parseAddressList(row.from_address ? [row.from_address] : null);
     if (!parsed) continue;
+
+    if (labels.includes(SPAM_LABEL)) spamAddresses.add(parsed.address);
 
     const merged = headersByAddress.get(parsed.address) ?? {};
     for (const [k, v] of Object.entries(row.raw_headers ?? {})) {
@@ -110,7 +120,8 @@ export async function classifyUserMail(
     const result = classifySender({
       address: contact.address,
       headers: headersByAddress.get(contact.address) ?? {},
-      hasReplied: repliedTo.has(contact.address),
+      hasReplied: repliedTo.has(canonicalAddress(contact.address)),
+      markedSpam: spamAddresses.has(contact.address),
     });
 
     const { error } = await admin

@@ -60,6 +60,47 @@ export function parseAddressList(
   return out;
 }
 
+/** Domains where dots in the local part are insignificant and `+` starts a tag. */
+const DOT_INSENSITIVE_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+]);
+
+/**
+ * Canonical form of an address for identity comparison.
+ *
+ * Gmail ignores dots and treats everything after `+` as a tag, so
+ * `kevin.cole@gmail.com`, `kevincole@gmail.com`, and `kevincole+news@gmail.com`
+ * are all the same mailbox. Without this, the user's own address fails to match
+ * their connected account: they end up as their own "contact", pollute
+ * participant sets, and flip thread tabs.
+ *
+ * Plus-tags are stripped on every domain (near-universal); dot-stripping is
+ * limited to domains where it actually applies.
+ */
+export function canonicalAddress(raw: string): string {
+  const address = raw.trim().toLowerCase();
+  const at = address.lastIndexOf("@");
+  if (at === -1) return address;
+
+  let local = address.slice(0, at);
+  const domain = address.slice(at + 1);
+
+  const plus = local.indexOf("+");
+  if (plus !== -1) local = local.slice(0, plus);
+
+  if (DOT_INSENSITIVE_DOMAINS.has(domain)) {
+    local = local.replaceAll(".", "");
+  }
+
+  return `${local}@${domain}`;
+}
+
+/** True when both addresses resolve to the same mailbox. */
+export function sameMailbox(a: string, b: string): boolean {
+  return canonicalAddress(a) === canonicalAddress(b);
+}
+
 export interface ParticipantSet {
   /** Sorted, de-duplicated, lowercased addresses excluding the user. */
   participants: string[];
@@ -82,11 +123,16 @@ export function buildParticipantSet(
   selfAddress: string,
 ): ParticipantSet {
   const self = selfAddress.trim().toLowerCase();
+  // Compare canonically so alias forms of the user's own address (dots,
+  // +tags) are recognized as self and excluded from the participant set.
+  const selfCanonical = canonicalAddress(self);
 
   const unique = new Set<string>();
   for (const a of addresses) {
     const normalized = a.trim().toLowerCase();
-    if (normalized && normalized !== self) unique.add(normalized);
+    if (!normalized) continue;
+    if (canonicalAddress(normalized) === selfCanonical) continue;
+    unique.add(normalized);
   }
 
   // Mail to yourself: keep the user as the sole participant so it still threads.

@@ -10,6 +10,9 @@ import type { ContactTab } from "@/lib/types";
 const TABS: { id: ContactTab; label: string }[] = [
   { id: "contact", label: "Contacts" },
   { id: "company", label: "Companies" },
+  // Quarantine for Gmail-flagged spam. Kept visible (not deleted) so false
+  // positives stay recoverable.
+  { id: "spam", label: "Spam" },
 ];
 
 /**

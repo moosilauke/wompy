@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncAccount } from "@/lib/gmail/sync";
-import { backfillThreadsForUser } from "@/lib/email/threading";
+import {
+  backfillThreadsForUser,
+  rebuildThreadsForUser,
+} from "@/lib/email/threading";
 import { classifyUserMail } from "@/lib/email/classify-run";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { EmailAccount } from "@/lib/types";
@@ -13,7 +16,7 @@ import type { EmailAccount } from "@/lib/types";
  * skipped cleanly (their sync arrives in a later session). Manual trigger is
  * enough to validate the data flow; an interval poller is a later refinement.
  */
-export async function POST() {
+export async function POST(request: Request) {
   if (!isSupabaseConfigured) {
     return NextResponse.json({ error: "not_configured" }, { status: 400 });
   }
@@ -59,9 +62,18 @@ export async function POST() {
 
   // Heal any messages that predate threading (or whose grouping failed midway).
   // Idempotent and cheap — it only looks at rows with a null thread_id.
+  //
+  // `rebuild=1` forces a full re-derivation, needed after the keying logic
+  // changes (e.g. Gmail alias normalization, which retroactively excludes the
+  // user's own dotted address from participant sets).
+  const forceRebuild =
+    new URL(request.url).searchParams.get("rebuild") === "1";
+
   let backfill = null;
   try {
-    backfill = await backfillThreadsForUser(user.id);
+    backfill = forceRebuild
+      ? await rebuildThreadsForUser(user.id)
+      : await backfillThreadsForUser(user.id);
   } catch (err) {
     backfill = {
       error: err instanceof Error ? err.message : "backfill_failed",

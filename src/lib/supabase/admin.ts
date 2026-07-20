@@ -12,7 +12,7 @@ import { NEXT_PUBLIC_SUPABASE_URL, serverEnv } from "@/lib/env";
 export function createAdminClient() {
   return createSupabaseClient(
     NEXT_PUBLIC_SUPABASE_URL,
-    serverEnv.supabaseServiceRoleKey,
+    serverEnv.supabaseSecretKey,
     {
       auth: {
         persistSession: false,

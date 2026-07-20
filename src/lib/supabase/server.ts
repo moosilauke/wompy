@@ -1,12 +1,12 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import {
-  NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   NEXT_PUBLIC_SUPABASE_URL,
 } from "@/lib/env";
 
 /**
- * Server-side Supabase client (anon key) bound to the request's cookies, so it
+ * Server-side Supabase client (publishable key) bound to the request's cookies, so it
  * acts as the signed-in user and is subject to Row Level Security. Use in
  * Server Components, Server Actions, and Route Handlers.
  *
@@ -17,7 +17,7 @@ export async function createClient() {
 
   return createServerClient(
     NEXT_PUBLIC_SUPABASE_URL,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
       cookies: {
         getAll() {

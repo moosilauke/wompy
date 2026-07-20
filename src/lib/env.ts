@@ -14,10 +14,12 @@ function required(name: string, value: string | undefined): string {
 }
 
 // Public (safe to expose to the browser).
+// Supabase's publishable key (sb_publishable_...) — the current name for what was
+// formerly the "anon" key. Client- and server-SSR clients use it under RLS.
 export const NEXT_PUBLIC_SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-export const NEXT_PUBLIC_SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+export const NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 export const NEXT_PUBLIC_APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -26,14 +28,16 @@ export const NEXT_PUBLIC_APP_URL =
  * crashing on every request. */
 export const isSupabaseConfigured =
   NEXT_PUBLIC_SUPABASE_URL.length > 0 &&
-  NEXT_PUBLIC_SUPABASE_ANON_KEY.length > 0;
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.length > 0;
 
 /** Server-only secrets. Never import these into client components. */
 export const serverEnv = {
-  get supabaseServiceRoleKey() {
+  // Supabase's secret key (sb_secret_...) — the current name for what was formerly
+  // the "service_role" key. Used only by the admin client, which bypasses RLS.
+  get supabaseSecretKey() {
     return required(
-      "SUPABASE_SERVICE_ROLE_KEY",
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      "SUPABASE_SECRET_KEY",
+      process.env.SUPABASE_SECRET_KEY,
     );
   },
   get googleClientId() {

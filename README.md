@@ -32,8 +32,9 @@ npm install
 ### 2. Create external services
 
 **Supabase** — create a project at [supabase.com](https://supabase.com). From
-**Settings → API**, copy the Project URL, the `anon` key, and the `service_role`
-key.
+**Settings → API Keys**, copy the Project URL, the **publishable** key
+(`sb_publishable_…`), and the **secret** key (`sb_secret_…`). (These are the
+current names for the former `anon` and `service_role` keys.)
 
 Apply the schema: open the SQL Editor and run the migrations in order —
 [`0001_init.sql`](./supabase/migrations/0001_init.sql) then

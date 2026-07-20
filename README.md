@@ -4,8 +4,6 @@ A contact-centric email client for Gmail. Instead of organizing mail by date or
 subject thread, Wompy organizes it the way chat apps do: one continuous
 conversation per contact (or group of participants).
 
-See [`wompy-mvp-plan.md`](./wompy-mvp-plan.md) for product scope and data model,
-and the Claude Design spec for visual direction.
 
 > **License:** [PolyForm Noncommercial 1.0.0](./LICENSE) — use, self-host, and
 > fork freely for noncommercial purposes; commercial use is not permitted.

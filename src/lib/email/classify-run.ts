@@ -54,16 +54,58 @@ export async function classifyUserMail(
     return parsed ? selfAddresses.has(canonicalAddress(parsed.address)) : false;
   };
 
-  // 1. Addresses the user has sent mail TO — the reply-reciprocity signal.
-  const { data: sentCandidates, error: sentError } = await admin
-    .from("messages")
-    .select("from_address, to_addresses, cc_addresses")
-    .eq("user_id", userId);
-  if (sentError) throw sentError;
+  // 1. One pass over the user's messages, serving both the reply-reciprocity
+  //    signal and the per-sender header merge below. This was two full-table
+  //    scans; the second also selected `raw_headers` whole, which was 171KB of
+  //    DKIM/ARC signature blocks to read three keys. Only the three keys the
+  //    classifier actually consults are projected, server-side.
+  //
+  //    Fetched alongside the contact and thread rows, which are independent of
+  //    it — only the writes further down depend on all three.
+  const [
+    { data: messageRows, error: messagesError },
+    { data: contacts, error: contactsError },
+    { data: threads, error: threadsError },
+  ] = await Promise.all([
+    admin
+      .from("messages")
+      .select(
+        "from_address, to_addresses, cc_addresses, label_ids," +
+          "list_unsubscribe:raw_headers->>list-unsubscribe," +
+          "precedence:raw_headers->>precedence," +
+          "message_id:raw_headers->>message-id",
+      )
+      .eq("user_id", userId),
+    admin
+      .from("contacts")
+      // `tab` is selected so overridden rows need no re-read, and so unchanged
+      // rows can be skipped instead of rewritten.
+      .select("id, address, manually_overridden, tab")
+      .eq("user_id", userId),
+    admin
+      .from("threads")
+      // `tab` selected so unchanged threads can be skipped.
+      .select("id, participant_set, tab")
+      .eq("user_id", userId),
+  ]);
+  if (messagesError) throw messagesError;
+  if (contactsError) throw contactsError;
+  if (threadsError) throw threadsError;
 
-  const sentRows = (sentCandidates ?? []).filter((row) =>
-    isFromSelf((row as { from_address: string | null }).from_address),
-  );
+  type MessageRow = {
+    from_address: string | null;
+    to_addresses: string[] | null;
+    cc_addresses: string[] | null;
+    label_ids: string[] | null;
+    list_unsubscribe: string | null;
+    precedence: string | null;
+    message_id: string | null;
+  };
+
+  // Cast through unknown: the generated types don't model PostgREST's
+  // `alias:column->>key` JSON projection, so they infer a string-error shape.
+  const allMessages = (messageRows ?? []) as unknown as MessageRow[];
+  const sentRows = allMessages.filter((row) => isFromSelf(row.from_address));
 
   // Stored canonically so a reply sent to any alias form still matches. The
   // user's own addresses are excluded so self-addressed mail doesn't make them
@@ -82,14 +124,8 @@ export async function classifyUserMail(
     }
   }
 
-  // 2. Merge the headers seen from each sender. A sender is judged on the union
-  //    of their headers, so one bulk-flagged message marks the sender.
-  const { data: received, error: receivedError } = await admin
-    .from("messages")
-    .select("from_address, raw_headers, label_ids")
-    .eq("user_id", userId);
-  if (receivedError) throw receivedError;
-
+  // 2. Merge the signals seen from each sender. A sender is judged on the union
+  //    of their messages, so one bulk-flagged message marks the sender.
   const headersByAddress = new Map<string, Record<string, string>>();
   const spamAddresses = new Set<string>();
   // Tracked per-sender rather than read off the merged headers: the merge keeps
@@ -97,11 +133,7 @@ export async function classifyUserMail(
   // be an arbitrary one of their messages. Any single message composed in a mail
   // client is enough to mark the sender as a person.
   const mailClientAddresses = new Set<string>();
-  for (const row of (received ?? []) as {
-    from_address: string | null;
-    raw_headers: Record<string, string>;
-    label_ids: string[] | null;
-  }[]) {
+  for (const row of allMessages) {
     const labels = row.label_ids ?? [];
     // Skip our own sent mail when judging senders — by From address, not the
     // SENT label (see note above).
@@ -111,27 +143,23 @@ export async function classifyUserMail(
 
     if (labels.includes(SPAM_LABEL)) spamAddresses.add(parsed.address);
 
-    if (isMailClientMessageId(row.raw_headers?.["message-id"])) {
+    if (isMailClientMessageId(row.message_id ?? undefined)) {
       mailClientAddresses.add(parsed.address);
     }
 
+    // Only the headers the classifier reads. Keep the first non-empty value
+    // seen per sender, matching the previous merge semantics.
     const merged = headersByAddress.get(parsed.address) ?? {};
-    for (const [k, v] of Object.entries(row.raw_headers ?? {})) {
-      // Keep the first non-empty value seen for each header.
-      if (v && !merged[k]) merged[k] = v;
+    if (row.list_unsubscribe && !merged["list-unsubscribe"]) {
+      merged["list-unsubscribe"] = row.list_unsubscribe;
+    }
+    if (row.precedence && !merged["precedence"]) {
+      merged["precedence"] = row.precedence;
     }
     headersByAddress.set(parsed.address, merged);
   }
 
   // 3. Classify each known contact, skipping manual overrides.
-  const { data: contacts, error: contactsError } = await admin
-    .from("contacts")
-    // `tab` is selected so overridden rows need no re-read, and so unchanged
-    // rows can be skipped instead of rewritten.
-    .select("id, address, manually_overridden, tab")
-    .eq("user_id", userId);
-  if (contactsError) throw contactsError;
-
   let contactsClassified = 0;
   let contactsSkippedOverridden = 0;
   const tabByAddress = new Map<string, ContactTab>();
@@ -191,13 +219,6 @@ export async function classifyUserMail(
 
   // 4. Derive each thread's tab from its participants. A thread with any
   //    Contact participant is a conversation, not a newsletter.
-  const { data: threads, error: threadsError } = await admin
-    .from("threads")
-    // `tab` selected so unchanged threads can be skipped.
-    .select("id, participant_set, tab")
-    .eq("user_id", userId);
-  if (threadsError) throw threadsError;
-
   // Batched for the same reason as the contact writes above.
   const threadUpdates: { id: string; tab: ContactTab }[] = [];
   for (const thread of (threads ?? []) as {

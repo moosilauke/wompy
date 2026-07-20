@@ -46,10 +46,44 @@ export default async function AppPage({
   const activeTab: ContactTab =
     tabParam === "company" || tabParam === "spam" ? tabParam : "contact";
 
-  // Connected inbox addresses — used to decide which bubbles are "mine".
-  const { data: accounts } = await supabase
-    .from("email_accounts")
-    .select("email");
+  // These four queries are independent of each other, so they go out together.
+  // Run sequentially they cost ~1.3s of round-trips; in parallel, ~0.25s — the
+  // page's dominant cost, since every sync ends in router.refresh().
+  //
+  // Only the per-thread message fetch below has to wait, because it depends on
+  // which thread ends up selected.
+  const [
+    { data: accounts },
+    { data: recentRows },
+    { data: threadRows },
+    { data: contactRows },
+  ] = await Promise.all([
+    // Connected inbox addresses — used to decide which bubbles are "mine".
+    supabase.from("email_accounts").select("email"),
+    // Latest surviving message per thread. This decides which threads exist at
+    // all: deleting the last message in a conversation must remove it from the
+    // rail rather than leave an empty row. `trashed_at is null` does that.
+    //
+    // `body_text` is deliberately not selected — it was 49KB across these rows
+    // and is only ever used as a snippet fallback, truncated to a preview.
+    // `snippet` alone covers that, and Gmail populates it for every message.
+    supabase
+      .from("messages")
+      .select("thread_id, snippet, internal_date")
+      .not("thread_id", "is", null)
+      .is("trashed_at", null)
+      .order("internal_date", { ascending: false })
+      .limit(400),
+    // All threads, newest activity first. Fetched whole so the tab counts are
+    // accurate without a second round-trip.
+    supabase
+      .from("threads")
+      .select("id, participant_set, last_message_at, tab")
+      .order("last_message_at", { ascending: false, nullsFirst: false }),
+    // Display names for participants, gathered during threading.
+    supabase.from("contacts").select("address, display_name, tab"),
+  ]);
+
   // Canonicalized so `Kevincole@`, `kevin.cole@`, and `kevincole+tag@` all match
   // the connected account.
   const selfAddresses = new Set(
@@ -58,38 +92,17 @@ export default async function AppPage({
     ),
   );
 
-  // Latest surviving message per thread. Fetched before the threads are
-  // filtered because it decides which threads exist at all: deleting the last
-  // message in a conversation must remove it from the rail, not leave an empty
-  // row behind. `trashed_at is null` is what makes that true.
-  const { data: recentRows } = await supabase
-    .from("messages")
-    .select("thread_id, snippet, body_text, internal_date")
-    .not("thread_id", "is", null)
-    .is("trashed_at", null)
-    .order("internal_date", { ascending: false })
-    .limit(400);
-
   const snippetByThread = new Map<string, string>();
   for (const row of (recentRows ?? []) as {
     thread_id: string;
     snippet: string | null;
-    body_text: string | null;
   }[]) {
     if (!snippetByThread.has(row.thread_id)) {
       // Decoded here as well as at ingest, so rows synced before the fix (and
       // any provider that escapes differently) still render clean text.
-      const preview = normalizeSnippet(row.snippet || row.body_text) ?? "";
-      snippetByThread.set(row.thread_id, preview);
+      snippetByThread.set(row.thread_id, normalizeSnippet(row.snippet) ?? "");
     }
   }
-
-  // All threads, newest activity first. Fetched together so the tab counts are
-  // accurate without a second round-trip.
-  const { data: threadRows } = await supabase
-    .from("threads")
-    .select("id, participant_set, last_message_at, tab")
-    .order("last_message_at", { ascending: false, nullsFirst: false });
 
   const allThreads = ((threadRows ?? []) as {
     id: string;
@@ -108,10 +121,6 @@ export default async function AppPage({
 
   const threads = allThreads.filter((t) => t.tab === activeTab);
 
-  // Display names for participants, gathered during threading.
-  const { data: contactRows } = await supabase
-    .from("contacts")
-    .select("address, display_name, tab");
   const nameByAddress = new Map<string, string | null>(
     (contactRows ?? []).map((c) => {
       const row = c as { address: string; display_name: string | null };

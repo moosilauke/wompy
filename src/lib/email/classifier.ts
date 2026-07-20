@@ -11,15 +11,24 @@ import type { ContactTab } from "@/lib/types";
  *   0. Gmail labeled it SPAM                             -> Spam
  *   1. List-Unsubscribe or Precedence: bulk/list header  -> Company
  *   2. You have ever replied to this sender              -> Contact (OVERRIDES 0, 1)
+ *   6. Address is no-reply@ / donotreply@                -> Company
  *   3. No bulk header + free-mail domain                 -> Contact
  *   5. No bulk header + mail-client Message-ID           -> Contact
  *   4. Everything else                                   -> Company (safe default)
  *
- * Rule 5 (added after rule 4 existed, hence the numbering) covers the case rules
- * 1-4 collectively miss: a real person writing from a corporate domain, before
- * you have replied to them. A recruiter or colleague at their own company would
- * otherwise sit in Companies until you happened to reply. It runs last among the
- * promoting rules so bulk and spam signals always take precedence.
+ * (Rules are numbered in the order they were added, not the order they run.)
+ *
+ * Rule 5 covers the case rules 1-4 collectively miss: a real person writing from
+ * a corporate domain, before you have replied to them. A recruiter or colleague
+ * at their own company would otherwise sit in Companies until you happened to
+ * reply. It runs last among the promoting rules so bulk and spam signals always
+ * take precedence.
+ *
+ * Rule 6 exists because Rule 5's evidence can be forged by accident: bulk
+ * senders sometimes emit Message-IDs that look hand-composed. An address saying
+ * "no-reply" is the sender declaring outright that this is not correspondence,
+ * which is stronger evidence than anything inferred from message construction —
+ * so it is checked before both Contact-promoting rules.
  *
  * Rule 0 uses Gmail's own spam verdict rather than our own heuristics — it's a
  * provider signal, and reimplementing spam detection is out of scope. Spam is
@@ -91,13 +100,23 @@ const MAIL_CLIENT_MESSAGE_ID_SUFFIXES = [
  */
 const MAIL_CLIENT_MESSAGE_ID_PATTERNS = [
   // Exchange / Outlook mailbox ids, e.g. <...MB1234...@namprd01.prod.outlook.com>
+  // Anchored to the sending domain, not just the local-part shape.
   /^<[a-z0-9]{2,}mb\d+[a-z0-9]*@[a-z0-9.-]*(outlook|exchangelabs|prod)\b/i,
-  // Thunderbird and similar: a canonically-formatted UUID as the whole local
-  // part. Fully anchored on both sides — an unanchored version matched
-  // SendGrid's 22-char base64 ids (<...@geopod-ismtpd-99>) and would have
-  // promoted bulk senders.
-  /^<[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@/i,
 ];
+
+/**
+ * Address local-parts that declare no human is reading replies. A sender saying
+ * "do not reply" is stating outright that this is not correspondence, which
+ * outranks any inference drawn from how the mail was constructed.
+ */
+const NO_REPLY_PATTERN = /(^|[._-])(no-?reply|do-?not-?reply|donotreply|noreply)([._-]|$)/i;
+
+/** True when the address advertises itself as unattended. */
+export function isNoReplyAddress(address: string): boolean {
+  const at = address.lastIndexOf("@");
+  const local = at === -1 ? address : address.slice(0, at);
+  return NO_REPLY_PATTERN.test(local);
+}
 
 /**
  * True when a Message-ID looks like it came from a human mail client rather
@@ -132,7 +151,7 @@ export interface ClassifierInput {
 
 export interface ClassificationSignals {
   /** Which numbered rule decided the outcome. */
-  rule: 0 | 1 | 2 | 3 | 4 | 5;
+  rule: 0 | 1 | 2 | 3 | 4 | 5 | 6;
   /** Short human-readable justification, surfaced in the debug view. */
   reason: string;
   hasListUnsubscribe: boolean;
@@ -141,6 +160,8 @@ export interface ClassificationSignals {
   hasReplied: boolean;
   markedSpam: boolean;
   usesMailClient: boolean;
+  /** True when the address advertises itself as unattended (no-reply@…). */
+  isNoReply: boolean;
   domain: string | null;
 }
 
@@ -181,6 +202,7 @@ export function classifySender(input: ClassifierInput): Classification {
     : false;
   const freeMail = isFreeMailDomain(address);
   const domain = domainOf(address);
+  const noReply = isNoReplyAddress(address);
 
   const base = {
     hasListUnsubscribe,
@@ -189,6 +211,7 @@ export function classifySender(input: ClassifierInput): Classification {
     hasReplied,
     markedSpam,
     usesMailClient,
+    isNoReply: noReply,
     domain,
   };
 
@@ -231,6 +254,24 @@ export function classifySender(input: ClassifierInput): Classification {
         ...base,
         rule: 1,
         reason: `Bulk mail header present (${which}).`,
+      },
+    };
+  }
+
+  // Rule 6: the address declares that nobody reads replies. This sits ahead of
+  // both Contact-promoting rules because it is the sender stating outright that
+  // this is not correspondence, which beats anything inferred from the domain or
+  // from how the message was constructed. Rule 2 still wins: if you have
+  // actually replied and got a response, the naming convention is beside the
+  // point.
+  if (noReply) {
+    return {
+      tab: "company",
+      signals: {
+        ...base,
+        rule: 6,
+        reason:
+          "The sending address declares itself unattended (no-reply), so it is not correspondence.",
       },
     };
   }

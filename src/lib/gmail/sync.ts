@@ -177,6 +177,11 @@ function mapMessageToRow(
     gmail_thread_id: msg.threadId ?? null,
     // Gmail's labels — SENT is what tells us a message is ours.
     label_ids: msg.labelIds ?? [],
+    // Mirror Gmail's TRASH label so trashing in either place agrees. `null`
+    // when untrashed, which also restores a message trashed elsewhere.
+    trashed_at: (msg.labelIds ?? []).includes("TRASH")
+      ? new Date().toISOString()
+      : null,
     from_address: headers["from"] ?? null,
     to_addresses: splitAddresses(headers["to"]),
     cc_addresses: splitAddresses(headers["cc"]),

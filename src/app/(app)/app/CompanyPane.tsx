@@ -1,4 +1,5 @@
 import { Avatar } from "./Avatar";
+import { MessageMenu } from "./MessageMenu";
 import { bubbleTime, dayDividerLabel } from "@/lib/format";
 
 export interface CompanyMessage {
@@ -81,10 +82,9 @@ export function CompanyPane({
         ) : (
           <ul className="flex flex-col gap-3">
             {messages.map((msg) => (
-              <li
-                key={msg.id}
-                className="rounded-[14px] border border-black/[0.06] bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
-              >
+              <li key={msg.id}>
+                <MessageMenu messageId={msg.id}>
+                <div className="rounded-[14px] border border-black/[0.06] bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
                 <div className="mb-1.5 flex items-baseline justify-between gap-4">
                   <h3 className="min-w-0 flex-1 font-display text-[15px] font-bold text-text-body">
                     {msg.subject ?? "(no subject)"}
@@ -103,6 +103,8 @@ export function CompanyPane({
                     HTML email — preview only
                   </p>
                 )}
+                </div>
+                </MessageMenu>
               </li>
             ))}
           </ul>

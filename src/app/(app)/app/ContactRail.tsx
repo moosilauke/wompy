@@ -4,6 +4,7 @@ import { railTimestamp } from "@/lib/format";
 import type { ContactTab } from "@/lib/types";
 import { NewMessageButton } from "./NewMessageButton";
 import type { ContactSuggestion } from "./NewMessage";
+import { ThreadRowMenu } from "./ThreadRowMenu";
 
 export interface RailThread {
   id: string;
@@ -70,6 +71,7 @@ export function ContactRail({
               const active = thread.id === selectedId;
               return (
                 <li key={thread.id}>
+                  <ThreadRowMenu threadId={thread.id} label={thread.label}>
                   <Link
                     href={`/app?tab=${activeTab}&thread=${thread.id}`}
                     aria-current={active ? "true" : undefined}
@@ -123,6 +125,7 @@ export function ContactRail({
                       </span>
                     </span>
                   </Link>
+                  </ThreadRowMenu>
                 </li>
               );
             })}

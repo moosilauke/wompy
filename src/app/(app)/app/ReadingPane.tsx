@@ -1,5 +1,6 @@
 import { Avatar } from "./Avatar";
 import { Composer } from "./Composer";
+import { MessageMenu } from "./MessageMenu";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
@@ -100,6 +101,7 @@ export function ReadingPane({
                     : "items-start self-start"
                 }`}
               >
+                <MessageMenu messageId={msg.id}>
                 <div
                   className={
                     msg.outgoing
@@ -121,6 +123,7 @@ export function ReadingPane({
                     </p>
                   )}
                 </div>
+                </MessageMenu>
 
                 <span className="px-1 text-[11.5px] text-text-muted-3">
                   {bubbleTime(msg.sentAt)}

@@ -10,6 +10,7 @@ import {
   type PaneThread,
 } from "./ReadingPane";
 import { CompanyPane, type CompanyMessage } from "./CompanyPane";
+import { ToastProvider } from "./Toasts";
 import type { ContactTab } from "@/lib/types";
 
 /**
@@ -112,6 +113,7 @@ export default async function AppPage({
     .from("messages")
     .select("thread_id, snippet, body_text, internal_date")
     .not("thread_id", "is", null)
+    .is("trashed_at", null)
     .order("internal_date", { ascending: false })
     .limit(400);
 
@@ -167,6 +169,7 @@ export default async function AppPage({
         "id, from_address, subject, body_text, body_html, snippet, internal_date, label_ids",
       )
       .eq("thread_id", selected.id)
+      .is("trashed_at", null)
       .order("internal_date", { ascending: activeTab === "contact" })
       // Newest-first for the list views; chronological for the chat view.
       .limit(200);
@@ -211,6 +214,7 @@ export default async function AppPage({
   }
 
   return (
+    <ToastProvider>
     <div className="flex h-screen flex-col overflow-hidden">
       <TopBar
         userEmail={user.email ?? null}
@@ -237,5 +241,6 @@ export default async function AppPage({
         )}
       </div>
     </div>
+    </ToastProvider>
   );
 }

@@ -12,9 +12,9 @@ export default async function Home() {
   if (!isSupabaseConfigured) redirect("/login");
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Local JWT verification rather than an auth-server round-trip; this is just
+  // a routing decision, and the destination re-checks anyway.
+  const { data: claims } = await supabase.auth.getClaims();
 
-  redirect(user ? "/app" : "/login");
+  redirect(claims?.claims ? "/app" : "/login");
 }

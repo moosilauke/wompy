@@ -30,10 +30,13 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  // getClaims() verifies the JWT locally rather than round-tripping to the auth
+  // server (~120ms) — this route is in the path of every menu action, so that
+  // latency was directly visible as click lag.
+  const { data: claims } = await supabase.auth.getClaims();
+  // `sub` is the JWT subject claim: the user id.
+  const userId = claims?.claims?.sub;
+  if (!userId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
   const { data: accounts, error: accountsError } = await admin
     .from("email_accounts")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("provider", "gmail")
     .order("created_at", { ascending: true })
     .limit(1);
@@ -75,7 +78,7 @@ export async function POST(request: Request) {
   if (payload.messageIds && payload.messageIds.length > 0) {
     targetIds = payload.messageIds;
   } else if (payload.threadId) {
-    targetIds = await messageIdsInThread(user.id, payload.threadId);
+    targetIds = await messageIdsInThread(userId, payload.threadId);
   }
 
   if (targetIds.length === 0) {

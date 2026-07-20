@@ -49,10 +49,17 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // IMPORTANT: getClaims()/getUser() must be called to trigger token refresh.
+  // IMPORTANT: this call must happen to trigger token refresh.
+  //
+  // getClaims() rather than getUser(): getUser() makes a network round-trip to
+  // the auth server on EVERY request to validate the token (~120ms measured,
+  // against a ~21ms REST baseline). getClaims() verifies the JWT signature
+  // locally against cached JWKS, and this project signs with ES256 (asymmetric),
+  // so no network call is needed. It still refreshes an expired session.
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: claims,
+  } = await supabase.auth.getClaims();
+  const user = claims?.claims ?? null;
 
   const { pathname } = request.nextUrl;
   const isProtected = PROTECTED_PREFIXES.some(

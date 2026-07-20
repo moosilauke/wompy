@@ -33,10 +33,16 @@ export default async function AppPage({
   if (!isSupabaseConfigured) redirect("/login");
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() verifies the JWT locally against cached JWKS; getUser() would
+  // round-trip to the auth server (~120ms) on every render. The proxy has
+  // already gated this route, so this is reading an established session rather
+  // than authenticating from scratch.
+  const { data: claims } = await supabase.auth.getClaims();
+  const user = claims?.claims;
   if (!user) redirect("/login");
+  // Queries below are scoped by RLS rather than an explicit user_id filter, so
+  // only the email (for the top bar) is read off the claims here.
+  const userEmail = typeof user.email === "string" ? user.email : null;
 
   const params = await searchParams;
   const first = (v: string | string[] | undefined) =>
@@ -238,7 +244,7 @@ export default async function AppPage({
     <ToastProvider>
     <div className="flex h-screen flex-col overflow-hidden">
       <TopBar
-        userEmail={user.email ?? null}
+        userEmail={userEmail}
         activeTab={activeTab}
         counts={counts}
       />

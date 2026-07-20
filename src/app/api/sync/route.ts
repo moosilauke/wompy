@@ -22,10 +22,13 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  // getClaims() verifies the JWT locally against cached JWKS rather than
+  // round-tripping to the auth server (~120ms). This route runs on every poll,
+  // so that cost recurred every two minutes.
+  const { data: claims } = await supabase.auth.getClaims();
+  // `sub` is the JWT subject claim: the user id.
+  const userId = claims?.claims?.sub;
+  if (!userId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -34,7 +37,7 @@ export async function POST(request: Request) {
   const { data: accounts, error } = await admin
     .from("email_accounts")
     .select("*")
-    .eq("user_id", user.id);
+    .eq("user_id", userId);
 
   if (error) {
     return NextResponse.json({ error: "load_accounts_failed" }, { status: 500 });
@@ -72,8 +75,8 @@ export async function POST(request: Request) {
   let backfill = null;
   try {
     backfill = forceRebuild
-      ? await rebuildThreadsForUser(user.id)
-      : await backfillThreadsForUser(user.id);
+      ? await rebuildThreadsForUser(userId)
+      : await backfillThreadsForUser(userId);
   } catch (err) {
     backfill = {
       error: err instanceof Error ? err.message : "backfill_failed",
@@ -84,7 +87,7 @@ export async function POST(request: Request) {
   // after threading so every contact row exists; respects manual overrides.
   let classification = null;
   try {
-    classification = await classifyUserMail(user.id);
+    classification = await classifyUserMail(userId);
   } catch (err) {
     classification = {
       error: err instanceof Error ? err.message : "classify_failed",

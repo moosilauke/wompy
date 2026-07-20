@@ -6,6 +6,7 @@ import {
   groupMessagesIntoThreads,
   type ThreadingResult,
 } from "@/lib/email/threading";
+import { normalizeSnippet } from "@/lib/email/text";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -175,7 +176,10 @@ function mapMessageToRow(
     email_account_id: account.id,
     gmail_message_id: msg.id!,
     gmail_thread_id: msg.threadId ?? null,
-    // Gmail's labels — SENT is what tells us a message is ours.
+    // Gmail's labels. Note SENT does NOT reliably mean "the user wrote this":
+    // for mail between two accounts the user owns, Gmail returns SENT on the
+    // inbound copy too. Authorship is decided by the From address instead.
+    // These are kept for SPAM/TRASH, which are trustworthy.
     label_ids: msg.labelIds ?? [],
     // Mirror Gmail's TRASH label so trashing in either place agrees. `null`
     // when untrashed, which also restores a message trashed elsewhere.
@@ -189,7 +193,9 @@ function mapMessageToRow(
     message_id_header: headers["message-id"] ?? null,
     in_reply_to: headers["in-reply-to"] ?? null,
     references_header: headers["references"] ?? null,
-    snippet: msg.snippet ?? null,
+    // Gmail returns snippets HTML-escaped (`YOU&#39;VE`); decode at ingest so
+    // every consumer gets clean text.
+    snippet: normalizeSnippet(msg.snippet),
     body_text: text,
     body_html: html,
     internal_date: msg.internalDate

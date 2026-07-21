@@ -1,7 +1,7 @@
 "use client";
 
-import { signOut } from "../actions";
-import { SyncPoller } from "./SyncPoller";
+import { SyncStatus, useSyncPoller } from "./SyncPoller";
+import { AccountMenu } from "./AccountMenu";
 import { Search } from "./Search";
 import { MoreMenu } from "./MoreMenu";
 import { BrandMark } from "@/components/ui/BrandMark";
@@ -45,6 +45,10 @@ export function TopBar({
   counts: Record<AppView, number>;
   onSelectTab: (tab: AppView) => void;
 }) {
+  // Polling lives here so the manual control (in the account menu) and the
+  // status indicator (in the bar) share one source of truth.
+  const { runSync, syncing, lastError, needsReauth } = useSyncPoller();
+
   return (
     <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
       <div className="flex items-center gap-7">
@@ -81,22 +85,15 @@ export function TopBar({
         </nav>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3">
         <Search />
-        <SyncPoller />
-        {userEmail && (
-          <span className="hidden text-[13px] font-bold text-on-spruce-muted md:inline">
-            {userEmail}
-          </span>
-        )}
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="rounded-full bg-coral px-[18px] py-[9px] text-[13px] font-extrabold text-white shadow-[0_4px_12px_oklch(0.5_0.12_25_/_0.4)] transition-opacity hover:opacity-90"
-          >
-            Sign out
-          </button>
-        </form>
+        {/* Only renders when something needs attention. */}
+        <SyncStatus lastError={lastError} needsReauth={needsReauth} />
+        <AccountMenu
+          userEmail={userEmail}
+          onSync={() => void runSync()}
+          syncing={syncing}
+        />
       </div>
     </header>
   );

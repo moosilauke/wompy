@@ -42,6 +42,9 @@ Last updated: 2026-07-21
 - Organization names derived for functional addresses (`no-reply@sentinelone.com`
   → "SentinelOne"), only where the local part is generic and the domain isn't
   free-mail
+- Account menu (top-right): sync, sign out, and placeholders for Profile /
+  Settings / Admin. Sync errors and the reconnect prompt stay in the bar rather
+  than behind a click
 - Landing page that IS the app shell, statically rendered
 - Unified sign-in/sign-up in a modal
 

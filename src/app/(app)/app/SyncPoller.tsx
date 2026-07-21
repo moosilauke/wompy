@@ -12,8 +12,12 @@ const POLL_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
  * Polling only (no Gmail push/Pub-Sub) per the MVP plan. Two guards keep it
  * well-behaved: skip while a sync is already in flight, and pause entirely when
  * the tab is hidden so a backgrounded tab doesn't keep hitting the Gmail API.
+ *
+ * Exposed as a hook because the manual "Sync now" control now lives in the
+ * account menu while the reconnect prompt stays in the bar — the two need the
+ * same state without two copies of the polling logic.
  */
-export function SyncPoller() {
+export function useSyncPoller() {
   const router = useRouter();
   const inFlight = useRef(false);
   const [syncing, setSyncing] = useState(false);
@@ -73,32 +77,44 @@ export function SyncPoller() {
     };
   }, [runSync]);
 
-  return (
-    <div className="flex items-center gap-3 text-[13px]">
-      {needsReauth && (
-        // Google's consent screen is the only fix, so link straight to it
-        // rather than reporting a failure the user can't act on.
-        <a
-          href="/api/auth/gmail/start"
-          className="rounded-full bg-coral px-[14px] py-[7px] font-bold text-white transition-opacity hover:opacity-90"
-        >
-          Reconnect Gmail
-        </a>
-      )}
-      {lastError && !needsReauth && (
-        <span className="font-bold text-coral" title={lastError}>
-          sync error
-        </span>
-      )}
-      {/* Secondary action — coral is reserved for the primary button. */}
-      <button
-        type="button"
-        onClick={runSync}
-        disabled={syncing}
-        className="rounded-full bg-spruce-raised px-[14px] py-[7px] font-bold text-on-spruce-muted transition-colors hover:text-white disabled:opacity-50"
+  return { runSync, syncing, lastError, needsReauth };
+}
+
+/**
+ * Sync status shown in the bar.
+ *
+ * Deliberately NOT inside the account menu: a reconnect prompt is the one thing
+ * the user must act on for mail to keep arriving, and burying it behind a click
+ * would hide it. Renders nothing when everything is healthy, so the bar stays
+ * quiet in the normal case.
+ */
+export function SyncStatus({
+  lastError,
+  needsReauth,
+}: {
+  lastError: string | null;
+  needsReauth: boolean;
+}) {
+  if (needsReauth) {
+    // Google's consent screen is the only fix, so link straight to it rather
+    // than reporting a failure the user can't act on.
+    return (
+      <a
+        href="/api/auth/gmail/start"
+        className="rounded-full bg-coral px-[14px] py-[7px] text-[13px] font-bold text-white transition-opacity hover:opacity-90"
       >
-        {syncing ? "Syncing…" : "Sync now"}
-      </button>
-    </div>
-  );
+        Reconnect Gmail
+      </a>
+    );
+  }
+
+  if (lastError) {
+    return (
+      <span className="text-[13px] font-bold text-coral" title={lastError}>
+        sync error
+      </span>
+    );
+  }
+
+  return null;
 }

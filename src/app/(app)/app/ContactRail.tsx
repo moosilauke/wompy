@@ -41,19 +41,10 @@ export function ContactRail({
 }) {
   return (
     <aside className="flex w-[320px] shrink-0 flex-col border-r border-spruce-edge bg-spruce shadow-[2px_0_16px_rgba(0,0,0,0.15)]">
-      <div className="flex flex-col gap-2.5 px-4 pb-2.5 pt-4">
+      {/* Search lives in the top bar, where it spans both panes rather than
+          looking scoped to the contact list. */}
+      <div className="px-4 pb-2.5 pt-4">
         <NewMessageButton contacts={contactSuggestions} />
-
-        {/* Decorative search — real search is a later step. */}
-        <div
-          className="flex items-center gap-2 rounded-[14px] bg-spruce-raised px-3.5 py-2.5"
-          aria-hidden
-        >
-          <span className="h-4 w-4 shrink-0 rounded-full border-2 border-on-spruce-muted" />
-          <span className="text-sm font-semibold text-on-spruce-muted">
-            Search people or messages
-          </span>
-        </div>
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4">

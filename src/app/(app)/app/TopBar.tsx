@@ -2,6 +2,7 @@
 
 import { signOut } from "../actions";
 import { SyncPoller } from "./SyncPoller";
+import { Search } from "./Search";
 import type { ContactTab } from "@/lib/types";
 
 /**
@@ -71,6 +72,7 @@ export function TopBar({
       </div>
 
       <div className="flex items-center gap-4">
+        <Search />
         <SyncPoller />
         {userEmail && (
           <span className="hidden text-[13px] font-bold text-on-spruce-muted md:inline">

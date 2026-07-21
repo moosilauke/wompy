@@ -84,6 +84,12 @@ export interface Excerpt {
    * replies" opened a modal containing neither.
    */
   full: string;
+  /**
+   * Quotes and signature removed, but no length cap — the whole of what this
+   * person actually wrote. What search should index: the excerpt would cut off
+   * long messages, and `full` would match text quoted from someone else.
+   */
+  cleaned: string;
   /** What was trimmed, for explaining the cut in the UI. */
   removed: {
     quotedHistory: boolean;
@@ -253,6 +259,7 @@ export function buildExcerpt(
       text: "",
       truncated: false,
       full: "",
+      cleaned: "",
       removed: { quotedHistory: false, signature: false, lengthCapped: false },
     };
   }
@@ -279,6 +286,7 @@ export function buildExcerpt(
       capped ||
       (!usedFallback && (dequoted.removed || designed.removed)),
     full,
+    cleaned: meaningful,
     removed: {
       quotedHistory: !usedFallback && dequoted.removed,
       signature: !usedFallback && designed.removed,

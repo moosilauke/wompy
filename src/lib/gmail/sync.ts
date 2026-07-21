@@ -6,7 +6,8 @@ import {
   groupMessagesIntoThreads,
   type ThreadingResult,
 } from "@/lib/email/threading";
-import { normalizeSnippet } from "@/lib/email/text";
+import { htmlToText, normalizeSnippet } from "@/lib/email/text";
+import { buildExcerpt } from "@/lib/email/excerpt";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -164,6 +165,23 @@ export async function ingestMessageById(
   );
 }
 
+/**
+ * The text a message should be searchable by: its own content, with quoted
+ * history and signature removed.
+ *
+ * `buildExcerpt` is reused rather than reimplemented, but the full cleaned body
+ * is taken (not the length-capped excerpt) — search should reach the end of a
+ * long message even though a bubble does not show it.
+ */
+function searchTextFor(
+  text: string | null,
+  html: string | null,
+): string | null {
+  const source = text ?? (html ? htmlToText(html) : null);
+  if (!source) return null;
+  return buildExcerpt(source).cleaned || source;
+}
+
 function mapMessageToRow(
   account: EmailAccount,
   msg: gmail_v1.Schema$Message,
@@ -196,6 +214,16 @@ function mapMessageToRow(
     // Gmail returns snippets HTML-escaped (`YOU&#39;VE`); decode at ingest so
     // every consumer gets clean text.
     snippet: normalizeSnippet(msg.snippet),
+    // Plain-text form for search.
+    //
+    // HTML-only mail (41% of the corpus) has no body_text, so without the
+    // conversion it would be unsearchable except by its short snippet.
+    //
+    // Excerpted rather than raw: quoted history would otherwise make every
+    // reply in a thread match terms only the original author wrote, so
+    // searching your own words would surface other people's messages.
+    // Signatures would likewise match every message a person ever sent.
+    search_text: searchTextFor(text, html),
     body_text: text,
     body_html: html,
     internal_date: msg.internalDate

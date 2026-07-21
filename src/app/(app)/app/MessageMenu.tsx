@@ -12,15 +12,29 @@ import { useMessageActions } from "./useMessageActions";
  */
 export function MessageMenu({
   messageId,
+  onShowFull,
   children,
 }: {
   messageId: string;
+  /** Provided when the message was trimmed, so "View full message" applies. */
+  onShowFull?: () => void;
   children: React.ReactNode;
 }) {
   const { position, open, close } = useContextMenu();
   const { trash } = useMessageActions();
 
   const actions: MenuAction[] = [
+    // Non-destructive actions first; Delete stays last so it is never the
+    // default target of a mis-click.
+    ...(onShowFull
+      ? [
+          {
+            id: "show-full",
+            label: "View full message",
+            onSelect: onShowFull,
+          },
+        ]
+      : []),
     {
       id: "trash",
       label: "Delete message",

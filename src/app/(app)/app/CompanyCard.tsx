@@ -1,0 +1,81 @@
+"use client";
+
+import { useState } from "react";
+import { MessageMenu } from "./MessageMenu";
+import { MessageModal } from "./MessageModal";
+import { bubbleTime, dayDividerLabel } from "@/lib/format";
+import type { CompanyMessage } from "./CompanyPane";
+
+/**
+ * One message in the Companies/Spam list view.
+ *
+ * The context menu wraps the whole card — subject line included — so
+ * right-clicking anywhere on it works. That means the card, not the body,
+ * owns the full-message modal, since both the menu and the inline expand link
+ * need to open it.
+ */
+export function CompanyCard({
+  message,
+  threadLabel,
+}: {
+  message: CompanyMessage;
+  threadLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const label = (() => {
+    if (message.removed.quotedHistory && message.removed.signature)
+      return "Show signature and quoted replies";
+    if (message.removed.quotedHistory) return "Show quoted replies";
+    if (message.removed.signature) return "Show signature";
+    return "Show full message";
+  })();
+
+  return (
+    <>
+      <MessageMenu
+        messageId={message.id}
+        onShowFull={message.truncated ? () => setOpen(true) : undefined}
+      >
+        <div className="rounded-[14px] border border-black/[0.06] bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
+          <div className="mb-1.5 flex items-baseline justify-between gap-4">
+            <h3 className="min-w-0 flex-1 font-display text-[15px] font-bold text-text-body">
+              {message.subject ?? "(no subject)"}
+            </h3>
+            <span className="shrink-0 text-[11.5px] text-text-muted-3">
+              {dayDividerLabel(message.sentAt)} · {bubbleTime(message.sentAt)}
+            </span>
+          </div>
+
+          <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.5] text-text-muted">
+            {message.body ?? ""}
+          </p>
+
+          {message.truncated && (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="mt-1.5 text-[12.5px] font-bold text-coral underline underline-offset-2 transition-opacity hover:opacity-80"
+            >
+              {label}
+            </button>
+          )}
+
+          {message.htmlOnly && (
+            <p className="mt-2 text-[11px] text-text-muted-3">
+              HTML email — preview only
+            </p>
+          )}
+        </div>
+      </MessageMenu>
+
+      <MessageModal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={message.subject ?? "(no subject)"}
+        subtitle={threadLabel}
+        body={message.fullBody}
+      />
+    </>
+  );
+}

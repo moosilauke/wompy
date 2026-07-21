@@ -86,6 +86,74 @@ function codePointOrSelf(code: number, original: string): string {
 }
 
 /**
+ * Convert an HTML email body to readable plain text.
+ *
+ * 42% of the test corpus arrives as HTML with no text/plain part, and was
+ * showing a "preview only" placeholder instead of content. Converting to text
+ * rather than sanitizing-and-injecting is the right trade for this product: the
+ * chat view renders prose, and it keeps the guarantee that `body_html` is never
+ * injected into the DOM — no XSS surface, no tracking pixels, no remote image
+ * loads revealing that mail was opened.
+ *
+ * Not a general-purpose HTML parser. It targets the structures that carry
+ * meaning in email — block boundaries, list items, link text — and discards the
+ * rest.
+ */
+export function htmlToText(html: string): string {
+  if (!html) return "";
+
+  let text = html;
+
+  // Remove entire elements whose content is never readable prose. Non-greedy so
+  // multiple occurrences are each removed rather than everything between the
+  // first opener and last closer.
+  text = text.replace(
+    /<(script|style|head|noscript|template|svg)\b[^>]*>[\s\S]*?<\/\1>/gi,
+    "",
+  );
+  // Comments, including the conditional comments Outlook-targeted mail is full of.
+  text = text.replace(/<!--[\s\S]*?-->/g, "");
+
+  // Table cells commonly stand in for layout columns; treat as separators so
+  // words from adjacent cells don't run together.
+  text = text.replace(/<\/(td|th)\s*>/gi, " ");
+  text = text.replace(/<\/(tr|table)\s*>/gi, "\n");
+
+  // Block-level boundaries become line breaks.
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  text = text.replace(
+    /<\/(p|div|h[1-6]|li|ul|ol|blockquote|section|article|header|footer)\s*>/gi,
+    "\n",
+  );
+  text = text.replace(/<li\b[^>]*>/gi, "• ");
+  text = text.replace(/<hr\s*\/?>/gi, "\n---\n");
+
+  // Drop every remaining tag.
+  text = text.replace(/<[^>]+>/g, "");
+
+  text = decodeHtmlEntities(text);
+
+  // Preheader spacers are often double-encoded (`&amp;zwnj;`), so one decode
+  // pass leaves a literal `&zwnj;` behind. Strip the named zero-width entities
+  // directly rather than decoding twice, which would risk turning genuine
+  // escaped text into markup.
+  text = text.replace(/&(zwnj|zwj|nbsp|shy|lrm|rlm|#8203|#x200b);/gi, " ");
+
+  // Marketing HTML is padded with zero-width and invisible characters used as
+  // preheader spacers; they survive tag-stripping and render as visual noise.
+  text = text.replace(/[​-‍⁠﻿­͏]/g, "");
+  // Non-breaking spaces behave like spaces once out of HTML.
+  text = text.replace(/ /g, " ");
+
+  return text
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
  * Normalize a snippet for display: decode entities and collapse whitespace.
  * Returns null for input that is empty once normalized.
  */

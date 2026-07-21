@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { canonicalAddress, parseAddress } from "@/lib/email/addresses";
-import { normalizeSnippet } from "@/lib/email/text";
+import { htmlToText, normalizeSnippet } from "@/lib/email/text";
 import { buildExcerpt } from "@/lib/email/excerpt";
 import { AppShell } from "./AppShell";
 import { type RailThread } from "./ContactRail";
@@ -233,9 +233,15 @@ export default async function AppPage({
     if (activeTab === "contact") {
       paneMessages = rows.map((m) => {
         const from = parseAddress(m.from_address);
-        const excerpt = buildExcerpt(
-          m.body_text ?? normalizeSnippet(m.snippet),
-        );
+        // HTML-only mail (42% of the corpus) is converted to text rather than
+        // sanitized and injected: the chat view renders prose, and this keeps
+        // `body_html` out of the DOM entirely — no XSS surface, no remote image
+        // loads signalling that mail was opened.
+        const source =
+          m.body_text ||
+          (m.body_html ? htmlToText(m.body_html) : null) ||
+          normalizeSnippet(m.snippet);
+        const excerpt = buildExcerpt(source);
         return {
           id: m.id,
           // The From address is the only reliable signal for "did I write this".
@@ -247,15 +253,23 @@ export default async function AppPage({
           fullBody: excerpt.full,
           truncated: excerpt.truncated,
           removed: excerpt.removed,
-          htmlOnly: !m.body_text && !!m.body_html,
+          // Only flagged when conversion produced nothing readable — otherwise the
+          // text above is the message, and a "preview only" note would be wrong.
+          htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
           sentAt: m.internal_date,
         };
       });
     } else {
       companyMessages = rows.map((m) => {
-        const excerpt = buildExcerpt(
-          m.body_text ?? normalizeSnippet(m.snippet),
-        );
+        // HTML-only mail (42% of the corpus) is converted to text rather than
+        // sanitized and injected: the chat view renders prose, and this keeps
+        // `body_html` out of the DOM entirely — no XSS surface, no remote image
+        // loads signalling that mail was opened.
+        const source =
+          m.body_text ||
+          (m.body_html ? htmlToText(m.body_html) : null) ||
+          normalizeSnippet(m.snippet);
+        const excerpt = buildExcerpt(source);
         return {
           id: m.id,
           subject: m.subject,
@@ -263,7 +277,9 @@ export default async function AppPage({
           fullBody: excerpt.full,
           truncated: excerpt.truncated,
           removed: excerpt.removed,
-          htmlOnly: !m.body_text && !!m.body_html,
+          // Only flagged when conversion produced nothing readable — otherwise the
+          // text above is the message, and a "preview only" note would be wrong.
+          htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
           sentAt: m.internal_date,
         };
       });

@@ -1,6 +1,5 @@
 import { Avatar } from "./Avatar";
 import { Composer } from "./Composer";
-import { MessageMenu } from "./MessageMenu";
 import { MessageBody } from "./MessageBody";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
@@ -110,7 +109,6 @@ export function ReadingPane({
                     : "items-start self-start"
                 }`}
               >
-                <MessageMenu messageId={msg.id}>
                 <div
                   className={
                     msg.outgoing
@@ -119,6 +117,7 @@ export function ReadingPane({
                   }
                 >
                   <MessageBody
+                    messageId={msg.id}
                     excerpt={msg.body ?? ""}
                     full={msg.fullBody}
                     truncated={msg.truncated}
@@ -126,19 +125,18 @@ export function ReadingPane({
                     outgoing={msg.outgoing}
                     title={msg.outgoing ? "Your message" : thread.label}
                     subtitle={dayDividerLabel(msg.sentAt)}
-                  />
-
-                  {msg.htmlOnly && (
-                    <p
-                      className={`mt-2 text-[11px] ${
-                        msg.outgoing ? "text-white/60" : "text-text-muted-3"
-                      }`}
-                    >
-                      HTML email — preview only
-                    </p>
-                  )}
+                  >
+                    {msg.htmlOnly && (
+                      <p
+                        className={`mt-2 text-[11px] ${
+                          msg.outgoing ? "text-white/60" : "text-text-muted-3"
+                        }`}
+                      >
+                        HTML email — preview only
+                      </p>
+                    )}
+                  </MessageBody>
                 </div>
-                </MessageMenu>
 
                 <span className="px-1 text-[11.5px] text-text-muted-3">
                   {bubbleTime(msg.sentAt)}

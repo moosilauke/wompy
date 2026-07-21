@@ -76,7 +76,13 @@ export interface Excerpt {
   text: string;
   /** True when content was removed and an expand affordance is needed. */
   truncated: boolean;
-  /** Full body with quotes and signature removed, for the expanded view. */
+  /**
+   * The complete original body, tidied but not trimmed.
+   *
+   * The expanded view must show what was actually removed: an earlier version
+   * returned the structurally-cleaned body here, so "Show signature and quoted
+   * replies" opened a modal containing neither.
+   */
   full: string;
   /** What was trimmed, for explaining the cut in the UI. */
   removed: {
@@ -253,21 +259,26 @@ export function buildExcerpt(
 
   const dequoted = stripQuotedHistory(source);
   const designed = stripSignature(dequoted.text);
-  const full = tidy(designed.text);
+  const trimmed = tidy(designed.text);
 
   // If trimming left nothing, the message was only a signature or only a quote.
   // Fall back to the tidied original rather than showing an empty bubble.
-  const meaningful = full.length > 0 ? full : tidy(source);
-  const usedFallback = full.length === 0;
+  const meaningful = trimmed.length > 0 ? trimmed : tidy(source);
+  const usedFallback = trimmed.length === 0;
 
   const { text, capped } = capLength(meaningful, limit);
+
+  // The expanded view gets the whole original, so the expand control's promise
+  // is honoured: asking to see a signature or quoted replies actually shows
+  // them.
+  const full = tidy(source);
 
   return {
     text,
     truncated:
       capped ||
       (!usedFallback && (dequoted.removed || designed.removed)),
-    full: meaningful,
+    full,
     removed: {
       quotedHistory: !usedFallback && dequoted.removed,
       signature: !usedFallback && designed.removed,

@@ -45,7 +45,7 @@ import type { ContactTab } from "@/lib/types";
  */
 
 /** Free/consumer mail domains: a personal address here suggests a real person. */
-const FREE_MAIL_DOMAINS = new Set([
+export const FREE_MAIL_DOMAINS = new Set([
   "gmail.com",
   "googlemail.com",
   "yahoo.com",

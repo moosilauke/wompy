@@ -1,3 +1,5 @@
+import { FREE_MAIL_DOMAINS } from "@/lib/email/classifier";
+
 /**
  * Email address parsing and participant-set thread keying.
  *
@@ -180,8 +182,142 @@ export function collectParticipants(message: {
  */
 export function labelForAddress(parsed: ParsedAddress): string {
   if (parsed.displayName) return parsed.displayName;
-  const localPart = parsed.address.split("@")[0] ?? parsed.address;
-  return localPart;
+  return fallbackLabel(parsed.address);
+}
+
+/**
+ * Local parts that name a mailbox's function rather than its owner. Seeing one
+ * means the address tells us nothing about who is writing.
+ */
+const GENERIC_LOCAL_PARTS =
+  /^(no-?reply|do-?not-?reply|donotreply|noreply|info|support|hello|hi|team|news|newsletter|mail|mailer|notifications?|notify|alerts?|updates?|contact|admin|help|service|customercare|care|billing|invoices?|receipts?|orders?|sales|marketing|messages?|post|inbox|feedback|survey|reply|auto-?confirm|automated?)([.\-_+].*)?$/i;
+
+/**
+ * A readable name for an address with no display name.
+ *
+ * Normally the local part is the best available guess — `jeconiahlangston@` is
+ * closer to a person's name than `gmail.com` is. But when the local part is
+ * purely functional, it identifies nothing: `no-reply@sentinelone.com` rendered
+ * as "no-reply" tells the user less than "SentinelOne" would.
+ *
+ * The domain is only substituted when BOTH hold:
+ *   - the local part is generic, AND
+ *   - the domain isn't free-mail
+ *
+ * Both conditions matter. `me@aol.com` has a generic-ish local part but "Aol"
+ * would be actively wrong — it's a person, and the domain is their mail
+ * provider, not their identity. Only an organization's own domain names the
+ * sender.
+ *
+ * Deliberately conservative: when unsure, the local part is kept. It is at
+ * worst uninformative, whereas a wrong company name is misinformation.
+ */
+export function fallbackLabel(address: string): string {
+  const at = address.lastIndexOf("@");
+  if (at === -1) return address;
+
+  const local = address.slice(0, at);
+  const domain = address.slice(at + 1).toLowerCase();
+
+  if (!GENERIC_LOCAL_PARTS.test(local)) return local;
+  if (FREE_MAIL_DOMAINS.has(domain)) return local;
+
+  return organizationNameFromDomain(domain) ?? local;
+}
+
+/**
+ * Turn a sending domain into a display name: `sentinelone.com` → "SentinelOne".
+ *
+ * Sending subdomains are stripped so `email.schwab.com` and
+ * `mail.notifications.acme.co.uk` resolve to the brand rather than the
+ * infrastructure in front of it.
+ *
+ * Returns null when nothing sensible can be derived, so the caller keeps its
+ * existing fallback rather than showing something wrong.
+ */
+function organizationNameFromDomain(domain: string): string | null {
+  const labels = domain.split(".").filter(Boolean);
+  if (labels.length < 2) return null;
+
+  // Drop the public suffix. Two labels are removed for known multi-part
+  // suffixes (.co.uk, .com.au), one otherwise.
+  const lastTwo = labels.slice(-2).join(".");
+  const stripped = MULTI_PART_SUFFIXES.has(lastTwo)
+    ? labels.slice(0, -2)
+    : labels.slice(0, -1);
+
+  // The registrable label is the last one remaining; anything before it is a
+  // sending subdomain (email., mail., notifications.).
+  const name = stripped[stripped.length - 1];
+  if (!name || name.length < 2) return null;
+
+  return prettifyDomainLabel(name);
+}
+
+/**
+ * Public suffixes with two labels. Not exhaustive — the full Public Suffix List
+ * is thousands of entries and a dependency this doesn't warrant. An unlisted
+ * suffix yields a slightly-off name, not a crash, and the common cases are here.
+ */
+const MULTI_PART_SUFFIXES = new Set([
+  "co.uk",
+  "org.uk",
+  "ac.uk",
+  "gov.uk",
+  "co.jp",
+  "co.nz",
+  "co.za",
+  "com.au",
+  "com.br",
+  "com.mx",
+  "com.sg",
+  "co.in",
+  "co.kr",
+]);
+
+/**
+ * `sentinelone` → "SentinelOne", `parts-express` → "Parts Express".
+ *
+ * Known multi-word brands are cased explicitly; anything else gets its
+ * separators turned into spaces and each word capitalized. Guessing at word
+ * boundaries inside a run of letters is not reliable enough to attempt.
+ */
+const BRAND_CASING = new Map([
+  ["sentinelone", "SentinelOne"],
+  ["github", "GitHub"],
+  ["gitlab", "GitLab"],
+  ["linkedin", "LinkedIn"],
+  ["paypal", "PayPal"],
+  ["youtube", "YouTube"],
+  ["doordash", "DoorDash"],
+  ["airbnb", "Airbnb"],
+  ["ebay", "eBay"],
+  ["iphone", "iPhone"],
+  ["openai", "OpenAI"],
+  ["chargepoint", "ChargePoint"],
+  ["wordpress", "WordPress"],
+  ["dropbox", "Dropbox"],
+  ["hubspot", "HubSpot"],
+  ["mailchimp", "Mailchimp"],
+  ["squarespace", "Squarespace"],
+  ["substack", "Substack"],
+  ["fedex", "FedEx"],
+  ["ups", "UPS"],
+  ["usps", "USPS"],
+  ["ibm", "IBM"],
+  ["aws", "AWS"],
+  ["nasa", "NASA"],
+]);
+
+function prettifyDomainLabel(label: string): string {
+  const known = BRAND_CASING.get(label.toLowerCase());
+  if (known) return known;
+
+  return label
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 /** Initials for an avatar chip, max two characters. */

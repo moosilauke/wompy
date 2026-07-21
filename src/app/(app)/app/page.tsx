@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
-import { canonicalAddress, parseAddress } from "@/lib/email/addresses";
+import {
+  canonicalAddress,
+  fallbackLabel,
+  parseAddress,
+} from "@/lib/email/addresses";
 import { htmlToText, normalizeSnippet } from "@/lib/email/text";
 import { buildExcerpt } from "@/lib/email/excerpt";
 import { AppShell } from "./AppShell";
@@ -168,8 +172,11 @@ export default async function AppPage({
     }),
   );
 
+  // A stored display name wins; otherwise derive something readable, which for
+  // a functional address like no-reply@sentinelone.com means the organization
+  // rather than the literal "no-reply".
   const labelFor = (address: string) =>
-    nameByAddress.get(address) || address.split("@")[0] || address;
+    nameByAddress.get(address) || fallbackLabel(address) || address;
 
   // Suggestions for the net-new compose combobox. Contacts first (real people),
   // then everyone else, so the most likely recipients surface at the top.
@@ -187,7 +194,7 @@ export default async function AppPage({
     })
     .map((c) => ({
       address: c.address,
-      label: c.display_name || c.address.split("@")[0] || c.address,
+      label: c.display_name || fallbackLabel(c.address) || c.address,
     }));
 
   const toRailThread = (

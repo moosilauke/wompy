@@ -1,12 +1,21 @@
 import { Avatar } from "./Avatar";
 import { MessageMenu } from "./MessageMenu";
+import { MessageBody } from "./MessageBody";
 import { bubbleTime, dayDividerLabel } from "@/lib/format";
 
 export interface CompanyMessage {
   id: string;
   subject: string | null;
+  /** Excerpt: quoted history and signature already removed. */
   body: string | null;
-  snippet: string | null;
+  /** Cleaned full body, shown in the modal when the excerpt was trimmed. */
+  fullBody: string;
+  truncated: boolean;
+  removed: {
+    quotedHistory: boolean;
+    signature: boolean;
+    lengthCapped: boolean;
+  };
   htmlOnly: boolean;
   sentAt: string | null;
 }
@@ -94,9 +103,16 @@ export function CompanyPane({
                   </span>
                 </div>
 
-                <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.5] text-text-muted">
-                  {msg.body ?? msg.snippet ?? ""}
-                </p>
+                <div className="text-[14px] leading-[1.5] text-text-muted">
+                  <MessageBody
+                    excerpt={msg.body ?? ""}
+                    full={msg.fullBody}
+                    truncated={msg.truncated}
+                    removed={msg.removed}
+                    title={msg.subject ?? "(no subject)"}
+                    subtitle={thread.label}
+                  />
+                </div>
 
                 {msg.htmlOnly && (
                   <p className="mt-2 text-[11px] text-text-muted-3">

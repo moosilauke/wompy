@@ -1,16 +1,25 @@
 import { Avatar } from "./Avatar";
 import { Composer } from "./Composer";
 import { MessageMenu } from "./MessageMenu";
+import { MessageBody } from "./MessageBody";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
   id: string;
   /** True when the signed-in user sent it (right-aligned, spruce bubble). */
   outgoing: boolean;
-  /** Best available body text; null when only HTML was available. */
+  /** Excerpt shown in the bubble: quoted history and signature already removed. */
   body: string | null;
-  /** Fallback preview when there's no plain-text body. */
-  snippet: string | null;
+  /** Cleaned full body, shown in the modal when the excerpt was trimmed. */
+  fullBody: string;
+  /** True when anything was removed, so an expand affordance is needed. */
+  truncated: boolean;
+  /** What was removed, used to label the expand control accurately. */
+  removed: {
+    quotedHistory: boolean;
+    signature: boolean;
+    lengthCapped: boolean;
+  };
   /** True when the message had only an HTML part (see note in the bubble). */
   htmlOnly: boolean;
   sentAt: string | null;
@@ -109,9 +118,15 @@ export function ReadingPane({
                       : "rounded-[4px_16px_16px_16px] border border-black/[0.06] bg-bubble-incoming px-4 py-3 text-[15px] font-medium leading-[1.45] text-text-body shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
                   }
                 >
-                  <p className="whitespace-pre-wrap break-words">
-                    {msg.body ?? msg.snippet ?? ""}
-                  </p>
+                  <MessageBody
+                    excerpt={msg.body ?? ""}
+                    full={msg.fullBody}
+                    truncated={msg.truncated}
+                    removed={msg.removed}
+                    outgoing={msg.outgoing}
+                    title={msg.outgoing ? "Your message" : thread.label}
+                    subtitle={dayDividerLabel(msg.sentAt)}
+                  />
 
                   {msg.htmlOnly && (
                     <p

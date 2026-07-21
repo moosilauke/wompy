@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { canonicalAddress, parseAddress } from "@/lib/email/addresses";
 import { normalizeSnippet } from "@/lib/email/text";
+import { buildExcerpt } from "@/lib/email/excerpt";
 import { AppShell } from "./AppShell";
 import { type RailThread } from "./ContactRail";
 import {
@@ -225,9 +226,16 @@ export default async function AppPage({
       label_ids: string[] | null;
     }[];
 
+    // Excerpting runs on the server so the client never receives the quoted
+    // history and signatures it isn't going to show. `full` is the structurally
+    // cleaned body — the expanded view drops boilerplate too, since nobody wants
+    // five levels of quote chain even when they ask for "more".
     if (activeTab === "contact") {
       paneMessages = rows.map((m) => {
         const from = parseAddress(m.from_address);
+        const excerpt = buildExcerpt(
+          m.body_text ?? normalizeSnippet(m.snippet),
+        );
         return {
           id: m.id,
           // The From address is the only reliable signal for "did I write this".
@@ -235,21 +243,30 @@ export default async function AppPage({
           // with your own other accounts, it returns SENT on inbound messages
           // too, which made every bubble render as outgoing.
           outgoing: from ? selfAddresses.has(canonicalAddress(from.address)) : false,
-          body: m.body_text,
-          snippet: normalizeSnippet(m.snippet),
+          body: excerpt.text,
+          fullBody: excerpt.full,
+          truncated: excerpt.truncated,
+          removed: excerpt.removed,
           htmlOnly: !m.body_text && !!m.body_html,
           sentAt: m.internal_date,
         };
       });
     } else {
-      companyMessages = rows.map((m) => ({
-        id: m.id,
-        subject: m.subject,
-        body: m.body_text,
-        snippet: normalizeSnippet(m.snippet),
-        htmlOnly: !m.body_text && !!m.body_html,
-        sentAt: m.internal_date,
-      }));
+      companyMessages = rows.map((m) => {
+        const excerpt = buildExcerpt(
+          m.body_text ?? normalizeSnippet(m.snippet),
+        );
+        return {
+          id: m.id,
+          subject: m.subject,
+          body: excerpt.text,
+          fullBody: excerpt.full,
+          truncated: excerpt.truncated,
+          removed: excerpt.removed,
+          htmlOnly: !m.body_text && !!m.body_html,
+          sentAt: m.internal_date,
+        };
+      });
     }
   }
 

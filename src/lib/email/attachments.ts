@@ -33,14 +33,65 @@ function header(
 /**
  * True when a part is embedded in the message body rather than attached to it.
  *
- * Two signals, either of which is sufficient:
- *   - `Content-ID`, which HTML references as `<img src="cid:...">`
- *   - `Content-Disposition: inline`
+ * `Content-Disposition` is the deciding signal, because it is the sender's
+ * actual statement of intent. `Content-ID` is NOT sufficient on its own: it only
+ * means the part *can* be referenced from the HTML as `<img src="cid:...">`, and
+ * Gmail stamps one on plenty of genuine attachments.
+ *
+ * Measured across 85 filename-bearing parts in the test mailbox:
+ *
+ *   48×  no Content-ID,  disposition: attachment   → real
+ *   16×  Content-ID,     disposition: inline       → embedded
+ *   12×  Content-ID,     disposition: attachment   → REAL, and an earlier
+ *                                                    version hid all of these
+ *    9×  no Content-ID,  no disposition            → ambiguous
+ *
+ * An earlier version treated any Content-ID as proof of embedding, which hid a
+ * screenshot someone deliberately attached and a fillable PDF form.
+ *
+ * With no disposition header at all, the part is shown. Those are all calendar
+ * invites here — content rather than decoration — and the failure modes are not
+ * symmetric: a spurious chip is visible clutter, while a hidden attachment is
+ * information the user was sent and never learns about.
  */
 function isInline(part: gmail_v1.Schema$MessagePart): boolean {
-  if (header(part, "content-id")) return true;
-  const disposition = header(part, "content-disposition") ?? "";
-  return disposition.trim().toLowerCase().startsWith("inline");
+  const disposition = (header(part, "content-disposition") ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (disposition.startsWith("inline")) return true;
+  if (disposition.startsWith("attachment")) {
+    // Senders mislabel their own signature graphics: a corporate footer logo
+    // arrives as `disposition: attachment` even though nobody attached it in
+    // any meaningful sense. Size settles it — see TINY_IMAGE_BYTES.
+    return isDecorativeImage(part);
+  }
+
+  // No disposition: fall back to Content-ID, which at least indicates the part
+  // is referenceable from the body.
+  return Boolean(header(part, "content-id"));
+}
+
+/**
+ * Images below this are decoration — logos, badges, spacer graphics — not
+ * something a person meant to send.
+ *
+ * The corpus has a clean gap: the largest decorative image is a 2.4 KB
+ * signature logo, and the smallest genuine one is a 27 KB delivery photo.
+ * 10 KB sits in the middle, so the threshold isn't finely tuned to one mailbox.
+ *
+ * Applied to images ONLY. Calendar invites run 754 B – 4 KB, and a blanket size
+ * rule would hide every meeting invitation — real content that happens to be
+ * small. A tiny document is still a document; a tiny image is a logo.
+ */
+const TINY_IMAGE_BYTES = 10 * 1024;
+
+function isDecorativeImage(part: gmail_v1.Schema$MessagePart): boolean {
+  const mime = (part.mimeType ?? "").toLowerCase();
+  if (!mime.startsWith("image/")) return false;
+
+  const size = part.body?.size ?? 0;
+  return size > 0 && size < TINY_IMAGE_BYTES;
 }
 
 /**

@@ -25,15 +25,22 @@ export interface ActionResult {
 async function gmailIdsFor(
   userId: string,
   messageIds: string[],
-): Promise<{ id: string; gmail_message_id: string }[]> {
+): Promise<{ id: string; gmail_message_id: string; label_ids: string[] }[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("messages")
-    .select("id, gmail_message_id")
+    .select("id, gmail_message_id, label_ids")
     .eq("user_id", userId)
     .in("id", messageIds);
   if (error) throw error;
-  return (data ?? []) as { id: string; gmail_message_id: string }[];
+  return (data ?? []).map((r) => {
+    const row = r as {
+      id: string;
+      gmail_message_id: string;
+      label_ids: string[] | null;
+    };
+    return { ...row, label_ids: row.label_ids ?? [] };
+  });
 }
 
 /** All non-trashed message ids in a thread. */
@@ -164,16 +171,29 @@ export async function trashMessages(
   if (messageIds.length === 0) return { messageIds: [] };
 
   const rows = await gmailIdsFor(account.user_id, messageIds);
+  if (rows.length === 0) return { messageIds: [] };
+
   const auth = await getAuthorizedClient(account);
   const gmail = google.gmail({ version: "v1", auth });
 
-  for (const row of rows) {
-    await gmail.users.messages.trash({
-      userId: "me",
-      id: row.gmail_message_id,
-    });
-  }
+  // One request for the whole set. `messages.trash` is per-message, so deleting
+  // a conversation used to cost one sequential round-trip per message —
+  // noticeably slow on a long thread. batchModify applies the TRASH label to
+  // every id at once, which is what trashing is underneath.
+  await gmail.users.messages.batchModify({
+    userId: "me",
+    requestBody: {
+      ids: rows.map((r) => r.gmail_message_id),
+      addLabelIds: ["TRASH"],
+      // Trashing removes a message from the inbox; without this it would keep
+      // showing there in Gmail.
+      removeLabelIds: ["INBOX"],
+    },
+  });
 
+  // Only `trashed_at` is written: `label_ids` deliberately keeps its pre-trash
+  // value so undo can tell an archived message from an inboxed one and restore
+  // each correctly. The next sync reconciles the array with Gmail.
   const admin = createAdminClient();
   const { error } = await admin
     .from("messages")
@@ -196,15 +216,40 @@ export async function untrashMessages(
   if (messageIds.length === 0) return { messageIds: [] };
 
   const rows = await gmailIdsFor(account.user_id, messageIds);
+  if (rows.length === 0) return { messageIds: [] };
+
   const auth = await getAuthorizedClient(account);
   const gmail = google.gmail({ version: "v1", auth });
 
-  for (const row of rows) {
-    await gmail.users.messages.untrash({
-      userId: "me",
-      id: row.gmail_message_id,
-    });
-  }
+  // Batched for the same reason as trashing — undo should feel instant.
+  //
+  // Split by whether the message was in the inbox when it was trashed: most
+  // trashed mail here (36 of 52) was already archived, and blanket-restoring
+  // INBOX would resurrect it into the inbox rather than back where it was.
+  const wasInInbox = rows.filter((r) => r.label_ids.includes("INBOX"));
+  const wasArchived = rows.filter((r) => !r.label_ids.includes("INBOX"));
+
+  await Promise.all([
+    wasInInbox.length > 0
+      ? gmail.users.messages.batchModify({
+          userId: "me",
+          requestBody: {
+            ids: wasInInbox.map((r) => r.gmail_message_id),
+            removeLabelIds: ["TRASH"],
+            addLabelIds: ["INBOX"],
+          },
+        })
+      : null,
+    wasArchived.length > 0
+      ? gmail.users.messages.batchModify({
+          userId: "me",
+          requestBody: {
+            ids: wasArchived.map((r) => r.gmail_message_id),
+            removeLabelIds: ["TRASH"],
+          },
+        })
+      : null,
+  ]);
 
   const admin = createAdminClient();
   const { error } = await admin

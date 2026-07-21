@@ -26,8 +26,11 @@ export function createOAuthClient(): GoogleOAuth2Client {
 /** Build the Google consent URL. `state` carries the app user id through the
  * round-trip so the callback can attribute the tokens.
  *
- * `access_type: offline` + `prompt: consent` guarantees a refresh_token even on
- * re-consent — without it Google omits the refresh_token on subsequent grants. */
+ * `prompt: consent` is kept HERE, unlike the sign-in path, because this is the
+ * deliberate "connect my mailbox" action: Google omits the refresh_token on
+ * re-authorization, and this flow exists precisely to (re)establish one. A user
+ * reaching this screen asked to connect Gmail, so a permission prompt is
+ * expected rather than friction. */
 export function buildConsentUrl(state: string): string {
   const client = createOAuthClient();
   return client.generateAuthUrl({
@@ -110,21 +113,69 @@ export async function getAuthorizedClient(
     !account.token_expiry ||
     new Date(account.token_expiry).getTime() - Date.now() < 60_000;
 
-  if (expiresSoon && account.refresh_token) {
-    const { credentials } = await client.refreshAccessToken();
-    client.setCredentials(credentials);
+  if (expiresSoon) {
+    // No refresh token and an expired access token is unrecoverable — the user
+    // has to grant access again. Say so rather than proceeding with a dead
+    // token and failing later as an opaque Gmail error.
+    if (!account.refresh_token) {
+      throw new GmailReauthRequiredError(
+        "Gmail access needs to be reconnected.",
+      );
+    }
 
-    const admin = createAdminClient();
-    await admin
-      .from("email_accounts")
-      .update({
-        access_token: credentials.access_token ?? account.access_token,
-        token_expiry: credentials.expiry_date
-          ? new Date(credentials.expiry_date).toISOString()
-          : account.token_expiry,
-      })
-      .eq("id", account.id);
+    try {
+      const { credentials } = await client.refreshAccessToken();
+      client.setCredentials(credentials);
+
+      const admin = createAdminClient();
+      await admin
+        .from("email_accounts")
+        .update({
+          access_token: credentials.access_token ?? account.access_token,
+          token_expiry: credentials.expiry_date
+            ? new Date(credentials.expiry_date).toISOString()
+            : account.token_expiry,
+        })
+        .eq("id", account.id);
+    } catch (err) {
+      // `invalid_grant` means the refresh token is dead: revoked from Google's
+      // account page, password changed, or expired through disuse. No amount of
+      // retrying fixes it — only re-consent does.
+      if (isInvalidGrant(err)) {
+        throw new GmailReauthRequiredError(
+          "Gmail access was revoked or expired. Reconnect to resume syncing.",
+        );
+      }
+      throw err;
+    }
   }
 
   return client;
+}
+
+/**
+ * Raised when a Gmail account can only be recovered by the user re-granting
+ * access. Callers surface a "Reconnect Gmail" affordance instead of a generic
+ * sync failure.
+ */
+export class GmailReauthRequiredError extends Error {
+  readonly code = "gmail_reauth_required";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "GmailReauthRequiredError";
+  }
+}
+
+/** Google signals a dead refresh token with an `invalid_grant` error. */
+function isInvalidGrant(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const candidate = err as {
+    message?: string;
+    response?: { data?: { error?: string } };
+  };
+  return (
+    candidate.response?.data?.error === "invalid_grant" ||
+    (candidate.message ?? "").includes("invalid_grant")
+  );
 }

@@ -132,8 +132,21 @@ function AuthFormFields() {
    * user may decline the Gmail scope and still get an account; the auth callback
    * only creates an email_accounts row if Gmail access was actually granted.
    *
-   * access_type=offline + prompt=consent are required for Supabase to surface a
-   * provider_refresh_token we can persist for ongoing Gmail API access.
+   * Deliberately NOT `prompt: "consent"`. That flag forces Google's permission
+   * screen on every sign-in, including returning users who granted everything
+   * months ago — friction other sites don't impose. It exists on the explicit
+   * "Connect Gmail" path (lib/gmail/auth.ts), where guaranteeing a refresh_token
+   * on first grant actually matters.
+   *
+   * Safe to omit here because Google only issues a refresh_token on first
+   * authorization anyway, and upsertGoogleTokensForUser keeps the stored one
+   * when a later response omits it. If a refresh token is genuinely missing or
+   * revoked, the app surfaces a reconnect prompt rather than silently failing —
+   * which also covers access revoked from Google's side, something no amount of
+   * re-prompting would catch.
+   *
+   * access_type=offline is still required for a refresh_token to be issued at
+   * all on the first grant.
    */
   async function handleGoogle() {
     setError(null);
@@ -144,7 +157,7 @@ function AuthFormFields() {
         options: {
           redirectTo: `${NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(next)}`,
           scopes: GMAIL_SCOPES.join(" "),
-          queryParams: { access_type: "offline", prompt: "consent" },
+          queryParams: { access_type: "offline" },
         },
       });
       if (error) throw error;

@@ -18,21 +18,37 @@ export function SyncPoller() {
   const inFlight = useRef(false);
   const [syncing, setSyncing] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  // Distinct from a generic error: this one the user can actually fix, and the
+  // only fix is re-granting access. Mirrored into a ref so the polling callback
+  // reads the current value rather than one captured when it was created.
+  const [needsReauth, setNeedsReauth] = useState(false);
+  const reauthRef = useRef(false);
 
   const runSync = useCallback(async () => {
     if (inFlight.current) return;
     if (typeof document !== "undefined" && document.hidden) return;
+    // Polling a connection that needs re-consent just burns requests on a
+    // guaranteed failure. The Reconnect button still works.
+    if (reauthRef.current) return;
 
     inFlight.current = true;
     setSyncing(true);
     try {
       const res = await fetch("/api/sync", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         setLastError(body?.error ?? `sync failed (${res.status})`);
       } else {
+        // A 200 can still carry a per-account failure: the route reports each
+        // account separately so one dead connection doesn't fail the whole run.
+        const reauth = (body?.results ?? []).some(
+          (r: { reauthRequired?: boolean }) => r.reauthRequired,
+        );
+        reauthRef.current = reauth;
+        setNeedsReauth(reauth);
         setLastError(null);
-        router.refresh();
+        if (!reauth) router.refresh();
       }
     } catch (err) {
       setLastError(err instanceof Error ? err.message : "sync failed");
@@ -59,7 +75,17 @@ export function SyncPoller() {
 
   return (
     <div className="flex items-center gap-3 text-[13px]">
-      {lastError && (
+      {needsReauth && (
+        // Google's consent screen is the only fix, so link straight to it
+        // rather than reporting a failure the user can't act on.
+        <a
+          href="/api/auth/gmail/start"
+          className="rounded-full bg-coral px-[14px] py-[7px] font-bold text-white transition-opacity hover:opacity-90"
+        >
+          Reconnect Gmail
+        </a>
+      )}
+      {lastError && !needsReauth && (
         <span className="font-bold text-coral" title={lastError}>
           sync error
         </span>

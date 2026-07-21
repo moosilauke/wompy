@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { syncAccount } from "@/lib/gmail/sync";
+import { GmailReauthRequiredError } from "@/lib/gmail/auth";
 import {
   backfillThreadsForUser,
   rebuildThreadsForUser,
@@ -56,9 +57,15 @@ export async function POST(request: Request) {
       const result = await syncAccount(account);
       results.push({ email: account.email, ...result });
     } catch (err) {
+      // A dead or missing refresh token is reported distinctly so the client can
+      // offer "Reconnect Gmail" instead of a generic sync error the user has no
+      // way to act on.
       results.push({
         email: account.email,
         error: err instanceof Error ? err.message : "sync_failed",
+        ...(err instanceof GmailReauthRequiredError
+          ? { reauthRequired: true }
+          : {}),
       });
     }
   }

@@ -39,6 +39,16 @@ Last updated: 2026-07-21
 - Parallelized page queries; stopped over-fetching `body_text` and `raw_headers`
 - Local JWT verification (`getClaims`) instead of auth-server round-trips
 - Client cache + instant client-side tab switching
+- Batched delete/undo (was one Gmail call per message at ~464ms each — a
+  12-message thread took ~5.5s; now one request regardless of size)
+
+**Auth**
+- Google sign-in no longer re-prompts for consent on every login; `prompt:
+  consent` is kept only on the explicit "Connect Gmail" path where a fresh
+  refresh token is the point
+- Dead or missing refresh tokens surface a "Reconnect Gmail" button instead of
+  a generic sync error, and pause polling rather than retrying a guaranteed
+  failure
 
 ---
 
@@ -81,7 +91,25 @@ account. Should land before any deploy.
   46% of sending domains are ESP subdomains needing registrable-domain
   extraction; `feefo.com` renders as "Charles Tyrwhitt", so a confident wrong
   logo is a real risk.
-- **Yahoo provider** — `src/lib/email/providers.ts` is already a registry
+- **Static pages** — documentation, privacy policy, about, Wompy vs Alternatives (competitive page), contact/help
+- **Payment/subscriptions** — will use Creem
+- **Profile page** — includes email provider config/reconfig, personal settings, avatar upload, etc
+- **Stats page** — unlike Gmail etc, we'll gamify things slightly by displaying some fun stats/metrics/analytics; leans into our brand ethos of being more than just a Gmail clone
+- **Admin panel** — need a place for admins, starting with basic info like seeing all users, basic metadata about them, subscription status, triggering password reset emails, etc
+- **Transactional emails** — welcome, account confirmation, password reset. Using Resend on another project and will likely use here too.
+- **Continue performance enhancements** — delete is fixed (batched); next
+  candidates are per-thread message fetch and the full-mailbox reclassify that
+  runs on every sync
+- **Rate limits / API failure handling** — nothing currently handles Gmail 429s
+  or a failed token refresh beyond the reauth case. Invisible with one user,
+  routine with fifty.
+- **Contact and contacts' messages multi-select** — ability, via keyboard (ctrl and shift-click) and GUI to select multiple contact conversations and/or select multiple messages/emails from a contact
+- **Create groups** — net new messages only allow selecting one recipient currently vs multiple
+- **Add forwarding** — ability to forward a message to another contact(s)
+- **Emoji reactions** — for clients that also support it, add emoji reactions on messages
+- **Add icons** — icons will help add visual interest and clue users in more quickly to various functions of a given button/menu
+- **Display full/rich HTML emails** — appears we're converting HTML to text vs selectively rendering some or all of the HTML
+- **Yahoo, Outlook, or iCloud Mail provider** — `src/lib/email/providers.ts` is already a registry
 - **Reply-to-one** in group threads (currently replies go to all participants)
 - **Spam false-positive escape** — a quarantined sender can only be rescued by
   replying to them in Gmail

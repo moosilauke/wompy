@@ -12,30 +12,11 @@ import { MessageMenu } from "./MessageMenu";
  * under every trimmed bubble competed with the message itself for attention,
  * which is exactly what the chat view is meant to avoid.
  */
-export interface RemovedParts {
-  quotedHistory: boolean;
-  signature: boolean;
-  lengthCapped: boolean;
-}
-
-/**
- * Name what was trimmed, so the menu item describes the actual content behind
- * it rather than a generic "show more".
- */
-export function expandLabel(removed: RemovedParts): string {
-  if (removed.quotedHistory && removed.signature)
-    return "View signature and quoted replies";
-  if (removed.quotedHistory) return "View quoted replies";
-  if (removed.signature) return "View signature";
-  return "View full message";
-}
-
 export function MessageBody({
   messageId,
   excerpt,
   full,
   truncated,
-  removed,
   title,
   subtitle,
   children,
@@ -44,7 +25,6 @@ export function MessageBody({
   excerpt: string;
   full: string;
   truncated: boolean;
-  removed: RemovedParts;
   title: string;
   subtitle?: string | null;
   /** Extra content rendered inside the bubble, below the text. */
@@ -57,7 +37,6 @@ export function MessageBody({
       <MessageMenu
         messageId={messageId}
         onShowFull={truncated ? () => setOpen(true) : undefined}
-        showFullLabel={expandLabel(removed)}
       >
         <p className="whitespace-pre-wrap break-words">{excerpt}</p>
         {children}

@@ -277,7 +277,6 @@ export default async function AppPage({
           body: excerpt.text,
           fullBody: excerpt.full,
           truncated: excerpt.truncated,
-          removed: excerpt.removed,
           // Only flagged when conversion produced nothing readable — otherwise the
           // text above is the message, and a "preview only" note would be wrong.
           htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
@@ -301,7 +300,6 @@ export default async function AppPage({
           body: excerpt.text,
           fullBody: excerpt.full,
           truncated: excerpt.truncated,
-          removed: excerpt.removed,
           // Only flagged when conversion produced nothing readable — otherwise the
           // text above is the message, and a "preview only" note would be wrong.
           htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,

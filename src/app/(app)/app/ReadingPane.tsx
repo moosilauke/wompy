@@ -14,12 +14,6 @@ export interface PaneMessage {
   fullBody: string;
   /** True when anything was removed, so an expand affordance is needed. */
   truncated: boolean;
-  /** What was removed, used to label the expand control accurately. */
-  removed: {
-    quotedHistory: boolean;
-    signature: boolean;
-    lengthCapped: boolean;
-  };
   /** True when the message had only an HTML part (see note in the bubble). */
   htmlOnly: boolean;
   sentAt: string | null;
@@ -126,7 +120,6 @@ export function ReadingPane({
                     excerpt={msg.body ?? ""}
                     full={msg.fullBody}
                     truncated={msg.truncated}
-                    removed={msg.removed}
                     title={msg.outgoing ? "Your message" : thread.label}
                     subtitle={dayDividerLabel(msg.sentAt)}
                   >

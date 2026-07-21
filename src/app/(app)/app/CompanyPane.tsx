@@ -10,11 +10,6 @@ export interface CompanyMessage {
   /** Cleaned full body, shown in the modal when the excerpt was trimmed. */
   fullBody: string;
   truncated: boolean;
-  removed: {
-    quotedHistory: boolean;
-    signature: boolean;
-    lengthCapped: boolean;
-  };
   htmlOnly: boolean;
   sentAt: string | null;
 }

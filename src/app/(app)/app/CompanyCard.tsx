@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { MessageMenu } from "./MessageMenu";
 import { MessageModal } from "./MessageModal";
-import { expandLabel } from "./MessageBody";
 import { bubbleTime, dayDividerLabel } from "@/lib/format";
 import type { CompanyMessage } from "./CompanyPane";
 
@@ -29,7 +28,6 @@ export function CompanyCard({
       <MessageMenu
         messageId={message.id}
         onShowFull={message.truncated ? () => setOpen(true) : undefined}
-        showFullLabel={expandLabel(message.removed)}
       >
         <div className="rounded-[14px] border border-black/[0.06] bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
           <div className="mb-1.5 flex items-baseline justify-between gap-4">

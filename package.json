@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "encrypt-tokens": "node scripts/encrypt-tokens.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

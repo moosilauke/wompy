@@ -42,13 +42,16 @@ Last updated: 2026-07-21
 - Batched delete/undo (was one Gmail call per message at ~464ms each — a
   12-message thread took ~5.5s; now one request regardless of size)
 
-**Auth**
+**Auth & security**
 - Google sign-in no longer re-prompts for consent on every login; `prompt:
   consent` is kept only on the explicit "Connect Gmail" path where a fresh
   refresh token is the point
 - Dead or missing refresh tokens surface a "Reconnect Gmail" button instead of
   a generic sync error, and pause polling rather than retrying a guaranteed
   failure
+- **OAuth tokens encrypted at rest** (AES-256-GCM, key in `TOKEN_ENCRYPTION_KEY`
+  outside the database). Versioned envelope so the key can be rotated later;
+  `npm run encrypt-tokens` migrates any legacy plaintext rows
 
 ---
 
@@ -73,10 +76,11 @@ information the user was sent, which is worse than a missing feature.
 
 Design spec calls for an inline chip in the bubble, not a separate tray.
 
-### 3. Token encryption at rest
-Gmail refresh tokens sit in plaintext in `email_accounts`. Acceptable for a
-single-user dev project; **not** acceptable before anyone else connects an
-account. Should land before any deploy.
+### 3. Key rotation path
+Tokens are encrypted, but there's no way to re-key without every user
+reconnecting. The `v1:` envelope prefix was designed for this — a rotation
+script would decrypt with the old key and re-encrypt with the new one. Not
+urgent, but cheaper to build before there are many rows.
 
 ---
 

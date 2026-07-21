@@ -2,6 +2,7 @@ import "server-only";
 import { google } from "googleapis";
 import { serverEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { decryptToken, encryptToken } from "@/lib/crypto";
 import { GMAIL_SCOPES } from "@/lib/email/providers";
 import type { EmailAccount } from "@/lib/types";
 
@@ -68,9 +69,11 @@ export async function upsertGoogleTokensForUser(
       user_id: userId,
       provider: "gmail",
       email,
-      access_token: tokens.access_token ?? null,
+      // Encrypted at rest: a refresh token grants ongoing access to the whole
+      // mailbox, so the database alone must not be enough to use one.
+      access_token: encryptToken(tokens.access_token),
       ...(tokens.refresh_token
-        ? { refresh_token: tokens.refresh_token }
+        ? { refresh_token: encryptToken(tokens.refresh_token) }
         : {}),
       token_expiry: tokens.expiry_date
         ? new Date(tokens.expiry_date).toISOString()
@@ -100,10 +103,14 @@ export async function fetchGmailAddress(
 export async function getAuthorizedClient(
   account: EmailAccount,
 ): Promise<GoogleOAuth2Client> {
+  // Decrypted only in memory, for the lifetime of this request. Rows written
+  // before encryption existed are still plaintext and pass through unchanged.
+  const refreshToken = decryptToken(account.refresh_token);
+
   const client = createOAuthClient();
   client.setCredentials({
-    access_token: account.access_token ?? undefined,
-    refresh_token: account.refresh_token ?? undefined,
+    access_token: decryptToken(account.access_token) ?? undefined,
+    refresh_token: refreshToken ?? undefined,
     expiry_date: account.token_expiry
       ? new Date(account.token_expiry).getTime()
       : undefined,
@@ -117,7 +124,7 @@ export async function getAuthorizedClient(
     // No refresh token and an expired access token is unrecoverable — the user
     // has to grant access again. Say so rather than proceeding with a dead
     // token and failing later as an opaque Gmail error.
-    if (!account.refresh_token) {
+    if (!refreshToken) {
       throw new GmailReauthRequiredError(
         "Gmail access needs to be reconnected.",
       );
@@ -131,7 +138,11 @@ export async function getAuthorizedClient(
       await admin
         .from("email_accounts")
         .update({
-          access_token: credentials.access_token ?? account.access_token,
+          // Re-encrypted before storing; `account.access_token` is already in
+          // stored form, so it's only the fresh value that needs encrypting.
+          access_token: credentials.access_token
+            ? encryptToken(credentials.access_token)
+            : account.access_token,
           token_expiry: credentials.expiry_date
             ? new Date(credentials.expiry_date).toISOString()
             : account.token_expiry,

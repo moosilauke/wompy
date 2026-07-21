@@ -49,4 +49,17 @@ export const serverEnv = {
   get googleRedirectUri() {
     return required("GOOGLE_REDIRECT_URI", process.env.GOOGLE_REDIRECT_URI);
   },
+  /**
+   * 32-byte key (base64 or hex) encrypting OAuth tokens at rest. Must live
+   * outside the database — its whole purpose is that a database compromise
+   * alone doesn't yield usable mailbox credentials.
+   *
+   * Generate with: openssl rand -base64 32
+   */
+  get tokenEncryptionKey() {
+    return required(
+      "TOKEN_ENCRYPTION_KEY",
+      process.env.TOKEN_ENCRYPTION_KEY,
+    );
+  },
 };

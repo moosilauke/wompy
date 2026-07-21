@@ -15,8 +15,10 @@ classifier, the chat and list views, reply and compose, delete, read/unread,
 search, and a landing page. See **[ROADMAP.md](./ROADMAP.md)** for what's shipped
 and what's next.
 
-Not yet production-ready — Gmail refresh tokens are stored unencrypted, which
-needs fixing before anyone but the developer connects an account.
+OAuth tokens are encrypted at rest (AES-256-GCM). The key lives in
+`TOKEN_ENCRYPTION_KEY`, deliberately outside the database — keep it out of
+backups, and note that changing it makes existing tokens unreadable, requiring
+every user to reconnect.
 
 ## Stack
 

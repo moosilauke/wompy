@@ -6,28 +6,25 @@ export interface ReactionSummary {
 }
 
 /**
- * Reactions on a message, shown as small badges below the bubble.
+ * Reactions on a message, shown as small badges attached to the bubble.
  *
  * Outside the bubble rather than inside it: a reaction is a response TO the
  * message, not part of what was said, and putting it inside would imply the
- * sender wrote it.
+ * sender wrote it. The caller positions the group (in the chat view it overlaps
+ * the bubble's bottom-left corner).
  *
  * Identical emoji collapse into one badge with a count, so five thumbs-up read
  * as "👍 5" rather than five separate badges.
  */
 export function ReactionBadges({
   reactions,
-  outgoing = false,
 }: {
   reactions: ReactionSummary[];
-  outgoing?: boolean;
 }) {
   if (reactions.length === 0) return null;
 
   return (
-    <span
-      className={`flex flex-wrap gap-1 ${outgoing ? "justify-end" : "justify-start"}`}
-    >
+    <span className="flex flex-wrap gap-1">
       {reactions.map((r) => (
         <span
           key={r.emoji}

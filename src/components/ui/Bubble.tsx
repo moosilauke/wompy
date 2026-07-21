@@ -45,17 +45,19 @@ export function Bubble({
 export function BubbleRow({
   outgoing = false,
   timestamp,
+  className = "",
   children,
 }: {
   outgoing?: boolean;
   timestamp?: string | null;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
     <div
       className={`flex max-w-[62%] flex-col gap-1 ${
         outgoing ? "items-end self-end" : "items-start self-start"
-      }`}
+      } ${className}`}
     >
       {children}
       {timestamp && (

@@ -113,38 +113,48 @@ export function ReadingPane({
               <BubbleRow
                 outgoing={msg.outgoing}
                 timestamp={bubbleTime(msg.sentAt)}
+                // Extra bottom room so a badge overlapping the bubble's lower
+                // edge isn't clipped by the next row.
+                className={msg.reactions.length > 0 ? "mb-3" : undefined}
               >
-                <Bubble outgoing={msg.outgoing}>
-                  <MessageBody
-                    messageId={msg.id}
-                    excerpt={msg.body ?? ""}
-                    full={msg.fullBody}
-                    truncated={msg.truncated}
-                    title={msg.outgoing ? "Your message" : thread.label}
-                    subtitle={dayDividerLabel(msg.sentAt)}
-                  >
-                    {msg.htmlOnly && (
-                      <p
-                        className={`mt-2 text-[11px] ${
-                          msg.outgoing ? "text-white/60" : "text-text-muted-3"
-                        }`}
-                      >
-                        HTML email — preview only
-                      </p>
-                    )}
-                    <AttachmentList
-                      attachments={msg.attachments}
-                      outgoing={msg.outgoing}
-                    />
-                  </MessageBody>
-                </Bubble>
+                {/* Positioning context for the reaction badge, which hangs off
+                    the bubble's bottom-left corner. */}
+                <div className="relative">
+                  <Bubble outgoing={msg.outgoing}>
+                    <MessageBody
+                      messageId={msg.id}
+                      excerpt={msg.body ?? ""}
+                      full={msg.fullBody}
+                      truncated={msg.truncated}
+                      title={msg.outgoing ? "Your message" : thread.label}
+                      subtitle={dayDividerLabel(msg.sentAt)}
+                    >
+                      {msg.htmlOnly && (
+                        <p
+                          className={`mt-2 text-[11px] ${
+                            msg.outgoing ? "text-white/60" : "text-text-muted-3"
+                          }`}
+                        >
+                          HTML email — preview only
+                        </p>
+                      )}
+                      <AttachmentList
+                        attachments={msg.attachments}
+                        outgoing={msg.outgoing}
+                      />
+                    </MessageBody>
+                  </Bubble>
 
-                {/* Below the bubble, not inside it: a reaction is a response TO
-                    the message, and nesting it would imply the sender wrote it. */}
-                <ReactionBadges
-                  reactions={msg.reactions}
-                  outgoing={msg.outgoing}
-                />
+                  {/* Bottom-left, nudged up and in so it slightly overlaps the
+                      bubble — a reaction is a response TO the message, and the
+                      overlap reads as "attached to this one" rather than as a
+                      separate element. */}
+                  {msg.reactions.length > 0 && (
+                    <div className="absolute -bottom-2.5 left-2 z-10">
+                      <ReactionBadges reactions={msg.reactions} />
+                    </div>
+                  )}
+                </div>
               </BubbleRow>
             </div>
           ))

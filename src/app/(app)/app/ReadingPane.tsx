@@ -3,6 +3,10 @@ import { Bubble, BubbleRow, DayDivider } from "@/components/ui/Bubble";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
 import { ScrollToLatest } from "./ScrollToLatest";
+import {
+  AttachmentList,
+  type AttachmentInfo,
+} from "@/components/ui/AttachmentChip";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
@@ -17,6 +21,7 @@ export interface PaneMessage {
   truncated: boolean;
   /** True when the message had only an HTML part (see note in the bubble). */
   htmlOnly: boolean;
+  attachments: AttachmentInfo[];
   sentAt: string | null;
 }
 
@@ -122,6 +127,10 @@ export function ReadingPane({
                         HTML email — preview only
                       </p>
                     )}
+                    <AttachmentList
+                      attachments={msg.attachments}
+                      outgoing={msg.outgoing}
+                    />
                   </MessageBody>
                 </Bubble>
               </BubbleRow>

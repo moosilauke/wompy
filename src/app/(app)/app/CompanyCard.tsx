@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MessageMenu } from "./MessageMenu";
 import { MessageModal } from "./MessageModal";
+import { AttachmentList } from "@/components/ui/AttachmentChip";
 import { bubbleTime, dayDividerLabel } from "@/lib/format";
 import type { CompanyMessage } from "./CompanyPane";
 
@@ -48,6 +49,8 @@ export function CompanyCard({
               HTML email — preview only
             </p>
           )}
+
+          <AttachmentList attachments={message.attachments} />
         </div>
       </MessageMenu>
 

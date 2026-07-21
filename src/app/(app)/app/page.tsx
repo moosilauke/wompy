@@ -16,6 +16,7 @@ import { MessageListPane, type ListedMessage } from "./MessageListPane";
 import { ToastProvider } from "./Toasts";
 import { MarkThreadRead } from "./MarkThreadRead";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
+import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
 
 /**
  * The authenticated app shell: contact rail + reading pane, per the design spec.
@@ -263,6 +264,37 @@ export default async function AppPage({
       .order("internal_date", { ascending: false })
       .limit(200);
 
+    // Attachments for exactly the messages being rendered — one extra query
+    // rather than a join, so the message fetch stays narrow.
+    const messageIds = ((messageRows ?? []) as { id: string }[]).map(
+      (m) => m.id,
+    );
+    const { data: attachmentRows } =
+      messageIds.length > 0
+        ? await supabase
+            .from("attachments")
+            .select("id, message_id, filename, mime_type, size_bytes")
+            .in("message_id", messageIds)
+        : { data: [] };
+
+    const attachmentsByMessage = new Map<string, AttachmentInfo[]>();
+    for (const row of (attachmentRows ?? []) as {
+      id: string;
+      message_id: string;
+      filename: string;
+      mime_type: string | null;
+      size_bytes: number | null;
+    }[]) {
+      const list = attachmentsByMessage.get(row.message_id) ?? [];
+      list.push({
+        id: row.id,
+        filename: row.filename,
+        mimeType: row.mime_type,
+        sizeBytes: row.size_bytes,
+      });
+      attachmentsByMessage.set(row.message_id, list);
+    }
+
     const rows = ((messageRows ?? []) as {
       id: string;
       from_address: string | null;
@@ -305,6 +337,7 @@ export default async function AppPage({
           // Only flagged when conversion produced nothing readable — otherwise the
           // text above is the message, and a "preview only" note would be wrong.
           htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
+          attachments: attachmentsByMessage.get(m.id) ?? [],
           sentAt: m.internal_date,
         };
       });
@@ -328,6 +361,7 @@ export default async function AppPage({
           // Only flagged when conversion produced nothing readable — otherwise the
           // text above is the message, and a "preview only" note would be wrong.
           htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
+          attachments: attachmentsByMessage.get(m.id) ?? [],
           sentAt: m.internal_date,
         };
       });

@@ -8,6 +8,7 @@ import {
 } from "@/lib/email/threading";
 import { htmlToText, normalizeSnippet } from "@/lib/email/text";
 import { buildExcerpt } from "@/lib/email/excerpt";
+import { extractAttachments } from "@/lib/email/attachments";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -69,8 +70,14 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
 
   const boundedIds = ids.slice(0, MAX_MESSAGES_PER_SYNC);
 
-  // 2. Fetch each full message and map to a row.
+  // 2. Fetch each full message and map to a row. Attachment metadata is kept
+  //    alongside, keyed by Gmail id, so it can be attributed to the stored rows
+  //    after the upsert assigns them ids.
   const rows = [];
+  const attachmentsByGmailId = new Map<
+    string,
+    ReturnType<typeof extractAttachments>
+  >();
   for (const id of boundedIds) {
     const full = (
       await gmail.users.messages.get({
@@ -80,6 +87,9 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
       })
     ).data;
     rows.push(mapMessageToRow(account, full));
+
+    const attachments = extractAttachments(full.payload ?? undefined);
+    if (attachments.length > 0) attachmentsByGmailId.set(id, attachments);
   }
 
   // 3. Upsert (idempotent). Select the stored rows back so threading can key
@@ -95,9 +105,13 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     const { data: stored, error } = await admin
       .from("messages")
       .upsert(rows, { onConflict: "email_account_id,gmail_message_id" })
-      .select("id, from_address, to_addresses, cc_addresses, internal_date");
+      .select(
+        "id, gmail_message_id, from_address, to_addresses, cc_addresses, internal_date",
+      );
     if (error) throw error;
     upserted = stored?.length ?? rows.length;
+
+    await storeAttachments(account.user_id, stored ?? [], attachmentsByGmailId);
 
     // 4. Group into participant-set threads (MVP step 3). Runs inside sync so
     //    there's no separate trigger to remember.
@@ -120,6 +134,50 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     since: sinceDate.toISOString(),
     threading,
   };
+}
+
+/**
+ * Persist attachment metadata for freshly-stored messages.
+ *
+ * Only metadata: Gmail keeps the bytes, and `gmail_attachment_id` fetches them
+ * on demand. Failures are swallowed — a missing paperclip is worth far less
+ * than the mail itself, so it must never fail a sync.
+ */
+async function storeAttachments(
+  userId: string,
+  stored: { id: string; gmail_message_id?: string | null }[],
+  attachmentsByGmailId: Map<string, ReturnType<typeof extractAttachments>>,
+): Promise<void> {
+  if (attachmentsByGmailId.size === 0) return;
+
+  const rows = [];
+  for (const message of stored) {
+    const gmailId = message.gmail_message_id;
+    if (!gmailId) continue;
+    for (const att of attachmentsByGmailId.get(gmailId) ?? []) {
+      rows.push({
+        user_id: userId,
+        message_id: message.id,
+        gmail_attachment_id: att.gmailAttachmentId,
+        filename: att.filename,
+        mime_type: att.mimeType,
+        size_bytes: att.sizeBytes,
+      });
+    }
+  }
+
+  if (rows.length === 0) return;
+
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("attachments")
+    // Re-syncing a message re-derives the same attachments; the unique
+    // constraint makes this a no-op rather than a duplicate.
+    .upsert(rows, { onConflict: "message_id,filename,size_bytes" });
+
+  if (error) {
+    console.error("Failed to store attachment metadata:", error.message);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -155,8 +213,19 @@ export async function ingestMessageById(
     .upsert([mapMessageToRow(account, full)], {
       onConflict: "email_account_id,gmail_message_id",
     })
-    .select("id, from_address, to_addresses, cc_addresses, internal_date");
+    .select(
+      "id, gmail_message_id, from_address, to_addresses, cc_addresses, internal_date",
+    );
   if (error) throw error;
+
+  const attachments = extractAttachments(full.payload ?? undefined);
+  if (attachments.length > 0) {
+    await storeAttachments(
+      account.user_id,
+      stored ?? [],
+      new Map([[gmailMessageId, attachments]]),
+    );
+  }
 
   await groupMessagesIntoThreads(
     account.user_id,

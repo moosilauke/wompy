@@ -31,6 +31,9 @@ Last updated: 2026-07-21
 - Message excerpting: quoted history + signature stripped, full text in a modal
 - HTML-only mail converted to readable text (41% of the corpus)
 - Search: people (trigram) + messages (Postgres FTS over excerpted bodies)
+- Attachments: inline chips in the bubble, downloaded from Gmail on demand
+  (metadata only, no duplicated blobs). Inline images and duplicate `.ics`
+  encodings filtered out
 - Landing page that IS the app shell, statically rendered
 - Unified sign-in/sign-up in a modal
 
@@ -69,14 +72,7 @@ Companies / Spam".
 
 Until this exists, every misclassification needs a developer.
 
-### 2. Attachments
-Sync captures nothing — no filenames, no MIME parts. Someone sends a PDF and
-Wompy shows a message with no sign it exists. That is silently losing
-information the user was sent, which is worse than a missing feature.
-
-Design spec calls for an inline chip in the bubble, not a separate tray.
-
-### 3. Key rotation path
+### 2. Key rotation path
 Tokens are encrypted, but there's no way to re-key without every user
 reconnecting. The `v1:` envelope prefix was designed for this — a rotation
 script would decrypt with the old key and re-encrypt with the new one. Not

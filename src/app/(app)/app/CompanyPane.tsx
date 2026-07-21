@@ -1,5 +1,6 @@
 import { Avatar } from "@/components/ui/Avatar";
 import { CompanyCard } from "./CompanyCard";
+import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
 import { ScrollToLatest } from "./ScrollToLatest";
 
 export interface CompanyMessage {
@@ -11,6 +12,7 @@ export interface CompanyMessage {
   fullBody: string;
   truncated: boolean;
   htmlOnly: boolean;
+  attachments: AttachmentInfo[];
   sentAt: string | null;
 }
 

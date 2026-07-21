@@ -39,7 +39,9 @@ function AuthFormFields({ mode }: { mode: Mode }) {
   const searchParams = useSearchParams();
   const supabase = createClient();
 
-  const [email, setEmail] = useState("");
+  // The landing page's composer hands the address over in the URL, so someone
+  // who typed it there doesn't have to type it again.
+  const [email, setEmail] = useState(() => searchParams.get("email") ?? "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);

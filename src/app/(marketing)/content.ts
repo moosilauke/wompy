@@ -1,0 +1,103 @@
+/**
+ * Landing page content.
+ *
+ * Copy is final per the design handoff ("colors, type, spacing, and copy are
+ * final for this MVP pass"), so it lives as data rather than being scattered
+ * through markup — easier to revise without touching layout.
+ */
+
+/** Placeholder conversations in the rail. Personality is the point: these read
+ * as a real person's inbox, which is what makes the chat model legible at a
+ * glance. */
+export const DEMO_CONTACTS = [
+  {
+    name: "Wompy",
+    address: "wompy",
+    snippet: "Let's get you set up",
+    time: "now",
+    unread: true,
+    active: true,
+  },
+  {
+    name: "Mom",
+    address: "mom@example.com",
+    snippet: "Call me later? no rush",
+    time: "2h",
+    unread: false,
+    active: false,
+  },
+  {
+    name: "That Dude From College",
+    address: "dude@example.com",
+    snippet: "yo it's been way too long",
+    time: "4h",
+    unread: false,
+    active: false,
+  },
+  {
+    name: "Abe Lincoln",
+    address: "abe@example.com",
+    snippet: "Four score and seven emails ago…",
+    time: "9h",
+    unread: false,
+    active: false,
+  },
+  {
+    name: "Lionel Messi",
+    address: "leo@example.com",
+    snippet: "See you at practice ⚽",
+    time: "1d",
+    unread: false,
+    active: false,
+  },
+  {
+    name: "Grandma Lou",
+    address: "lou@example.com",
+    snippet: "Sending pictures from the trip!",
+    time: "2d",
+    unread: false,
+    active: false,
+  },
+  {
+    name: "Landlord",
+    address: "landlord@example.com",
+    snippet: "Rent reminder for the 1st",
+    time: "3d",
+    unread: false,
+    active: false,
+  },
+] as const;
+
+/** The three feature bubbles, each with a coloured icon chip. */
+export const FEATURES = [
+  {
+    title: "One chat per person",
+    body: "No threads to untangle — everything from someone lives in one place.",
+    chip: "bg-avatar-blue",
+  },
+  {
+    title: "Feels like texting",
+    body: "Familiar bubbles and quick replies, not a corporate inbox.",
+    chip: "bg-avatar-sage",
+  },
+  {
+    title: "Cuts the busywork",
+    body: "No subject lines, no signatures — just write what you mean.",
+    chip: "bg-avatar-terracotta",
+  },
+] as const;
+
+export const PLANS = [
+  { label: "Free — $0/mo", popular: false },
+  { label: "Plus — $6/mo", popular: true },
+  { label: "Family — $12/mo", popular: false },
+] as const;
+
+/** Utility links in the rail's collapsible "More" section. */
+export const MORE_LINKS = [
+  "About us",
+  "Documentation",
+  "Privacy policy",
+  "FAQs",
+  "Get help",
+] as const;

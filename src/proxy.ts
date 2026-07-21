@@ -24,6 +24,12 @@ const AUTH_ROUTES = ["/login", "/signup"];
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
+  // The landing page is public and statically rendered. Skipping the session
+  // work here keeps first paint off the auth path entirely — a visitor with no
+  // cookie has nothing to refresh, and this is the page where a slow response
+  // costs the most.
+  if (request.nextUrl.pathname === "/") return response;
+
   // Before credentials are configured, don't touch Supabase — let the app boot
   // so the developer can see it's alive (auth pages show a "configure me" note).
   if (!isSupabaseConfigured) return response;

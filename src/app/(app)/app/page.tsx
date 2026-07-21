@@ -13,6 +13,7 @@ import {
 } from "./ReadingPane";
 import { CompanyPane, type CompanyMessage } from "./CompanyPane";
 import { ToastProvider } from "./Toasts";
+import { MarkThreadRead } from "./MarkThreadRead";
 import type { ContactTab } from "@/lib/types";
 
 /**
@@ -76,7 +77,7 @@ export default async function AppPage({
     // `snippet` alone covers that, and Gmail populates it for every message.
     supabase
       .from("messages")
-      .select("thread_id, snippet, internal_date")
+      .select("thread_id, snippet, internal_date, label_ids")
       .not("thread_id", "is", null)
       .is("trashed_at", null)
       .order("internal_date", { ascending: false })
@@ -100,14 +101,22 @@ export default async function AppPage({
   );
 
   const snippetByThread = new Map<string, string>();
+  // A thread is unread when any message in it still carries Gmail's UNREAD
+  // label — the same arrangement as TRASH, so there is no local read state to
+  // drift out of sync with Gmail.
+  const unreadThreads = new Set<string>();
   for (const row of (recentRows ?? []) as {
     thread_id: string;
     snippet: string | null;
+    label_ids: string[] | null;
   }[]) {
     if (!snippetByThread.has(row.thread_id)) {
       // Decoded here as well as at ingest, so rows synced before the fix (and
       // any provider that escapes differently) still render clean text.
       snippetByThread.set(row.thread_id, normalizeSnippet(row.snippet) ?? "");
+    }
+    if ((row.label_ids ?? []).includes("UNREAD")) {
+      unreadThreads.add(row.thread_id);
     }
   }
 
@@ -155,7 +164,10 @@ export default async function AppPage({
       label: c.display_name || c.address.split("@")[0] || c.address,
     }));
 
-  const toRailThread = (t: (typeof allThreads)[number]): RailThread => {
+  const toRailThread = (
+    t: (typeof allThreads)[number],
+    openThreadId: string | null,
+  ): RailThread => {
     const participants = t.participant_set ?? [];
     const primary = participants[0] ?? "";
     return {
@@ -165,9 +177,10 @@ export default async function AppPage({
       extraParticipants: Math.max(0, participants.length - 1),
       snippet: snippetByThread.get(t.id) ?? "",
       lastMessageAt: t.last_message_at,
-      // Read/unread isn't tracked in the schema yet; the rail's unread styling
-      // is in place and will light up once that data exists.
-      unread: false,
+      // The currently-open thread never shows as unread: it is being marked
+      // read as it renders, and a dot that vanishes a moment later reads as a
+      // glitch.
+      unread: unreadThreads.has(t.id) && t.id !== openThreadId,
     };
   };
 
@@ -178,17 +191,25 @@ export default async function AppPage({
   // anyway — and lets the client switch tabs without a server round-trip.
   // Previously a tab switch re-fetched identical data just to filter it
   // differently.
-  const railByTab: Record<ContactTab, RailThread[]> = {
-    contact: allThreads.filter((t) => t.tab === "contact").map(toRailThread),
-    company: allThreads.filter((t) => t.tab === "company").map(toRailThread),
-    spam: allThreads.filter((t) => t.tab === "spam").map(toRailThread),
-  };
-
   const threads = allThreads.filter((t) => t.tab === activeTab);
 
-  // Resolve the selected thread (default: most recent).
+  // Resolve the selected thread (default: most recent). Done before the rail is
+  // built so the open conversation can be excluded from the unread treatment —
+  // with no `?thread=`, the first thread is still the one being read.
   const selected =
     threads.find((t) => t.id === requestedThreadId) ?? threads[0] ?? null;
+
+  const railByTab: Record<ContactTab, RailThread[]> = {
+    contact: allThreads
+      .filter((t) => t.tab === "contact")
+      .map((t) => toRailThread(t, selected?.id ?? null)),
+    company: allThreads
+      .filter((t) => t.tab === "company")
+      .map((t) => toRailThread(t, selected?.id ?? null)),
+    spam: allThreads
+      .filter((t) => t.tab === "spam")
+      .map((t) => toRailThread(t, selected?.id ?? null)),
+  };
 
   let paneThread: PaneThread | null = null;
   let paneMessages: PaneMessage[] = [];
@@ -292,6 +313,13 @@ export default async function AppPage({
 
   return (
     <ToastProvider>
+      {/* Renders nothing; fires the mark-read request for the open thread. */}
+      {selected && (
+        <MarkThreadRead
+          threadId={selected.id}
+          hasUnread={unreadThreads.has(selected.id)}
+        />
+      )}
       <AppShell
         userEmail={userEmail}
         initialTab={activeTab}

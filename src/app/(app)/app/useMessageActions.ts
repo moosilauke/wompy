@@ -55,5 +55,27 @@ export function useMessageActions() {
     [run, router, notify],
   );
 
-  return { trash };
+  /**
+   * Flip a conversation's read state.
+   *
+   * No Undo toast: the action is its own inverse and one click away in the same
+   * menu, so a toast would be noise.
+   */
+  const setRead = useCallback(
+    async (target: { threadId?: string; messageIds?: string[] }, read: boolean) => {
+      try {
+        await run({ action: read ? "read" : "unread", ...target });
+        router.refresh();
+      } catch (err) {
+        notify(
+          err instanceof Error
+            ? err.message
+            : `Couldn’t mark ${read ? "read" : "unread"}`,
+        );
+      }
+    },
+    [run, router, notify],
+  );
+
+  return { trash, setRead };
 }

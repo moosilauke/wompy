@@ -16,9 +16,12 @@ export interface RailThread {
   extraParticipants: number;
   snippet: string;
   lastMessageAt: string | null;
-  /** Drives the unread treatment (bold name, brighter snippet, coral dot).
-   * Read/unread isn't tracked in the schema yet, so this is always false for
-   * now — the styling is here and ready for when that data exists. */
+  /**
+   * Drives the unread treatment (bold name, brighter snippet, coral dot).
+   * True when any message in the thread still carries Gmail's UNREAD label,
+   * except for the conversation currently open — that one is being marked read
+   * as it renders.
+   */
   unread: boolean;
 }
 
@@ -62,7 +65,11 @@ export function ContactRail({
               const active = thread.id === selectedId;
               return (
                 <li key={thread.id}>
-                  <ThreadRowMenu threadId={thread.id} label={thread.label}>
+                  <ThreadRowMenu
+                    threadId={thread.id}
+                    label={thread.label}
+                    unread={thread.unread}
+                  >
                   <Link
                     href={`/app?tab=${activeTab}&thread=${thread.id}`}
                     aria-current={active ? "true" : undefined}

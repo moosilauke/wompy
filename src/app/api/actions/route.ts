@@ -3,8 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
+  markMessagesRead,
+  markMessagesUnread,
   messageIdsInThread,
   trashMessages,
+  unreadMessageIdsInThread,
   untrashMessages,
 } from "@/lib/gmail/actions";
 import type { EmailAccount } from "@/lib/types";
@@ -13,16 +16,16 @@ import type { EmailAccount } from "@/lib/types";
  * Message actions endpoint.
  *
  * Deliberately shaped as { action, target } rather than a per-action route, so
- * future actions (archive, mark read, snooze, reclassify) slot in by adding a
- * case here and an item to the context menu — no new plumbing.
+ * future actions (archive, snooze, reclassify) slot in by adding a case here and
+ * an item to the context menu — no new plumbing.
  *
  * Body:
- *   { action: "trash" | "untrash",
+ *   { action: "trash" | "untrash" | "read" | "unread",
  *     threadId?: string,      // act on the whole conversation
  *     messageIds?: string[] } // or specific messages
  */
 
-const SUPPORTED = new Set(["trash", "untrash"]);
+const SUPPORTED = new Set(["trash", "untrash", "read", "unread"]);
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured) {
@@ -78,18 +81,39 @@ export async function POST(request: Request) {
   if (payload.messageIds && payload.messageIds.length > 0) {
     targetIds = payload.messageIds;
   } else if (payload.threadId) {
-    targetIds = await messageIdsInThread(userId, payload.threadId);
+    targetIds =
+      action === "read"
+        ? // Only the unread ones: marking read fires on every thread open, and
+          // re-asserting the label on an already-read conversation would cost a
+          // pointless Gmail round-trip.
+          await unreadMessageIdsInThread(userId, payload.threadId)
+        : await messageIdsInThread(userId, payload.threadId);
   }
 
   if (targetIds.length === 0) {
+    // Nothing to do is a success for read/unread — opening an already-read
+    // conversation is the common case, not an error.
+    if (action === "read" || action === "unread") {
+      return NextResponse.json({ ok: true, action, messageIds: [] });
+    }
     return NextResponse.json({ error: "no_target" }, { status: 400 });
   }
 
   try {
-    const result =
-      action === "trash"
-        ? await trashMessages(account, targetIds)
-        : await untrashMessages(account, targetIds);
+    let result;
+    switch (action) {
+      case "trash":
+        result = await trashMessages(account, targetIds);
+        break;
+      case "untrash":
+        result = await untrashMessages(account, targetIds);
+        break;
+      case "read":
+        result = await markMessagesRead(account, targetIds);
+        break;
+      default:
+        result = await markMessagesUnread(account, targetIds);
+    }
 
     return NextResponse.json({ ok: true, action, ...result });
   } catch (err) {

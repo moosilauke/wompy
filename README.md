@@ -10,10 +10,13 @@ conversation per contact (or group of participants).
 
 ## Status
 
-Backend foundation done: Next.js scaffold, Supabase schema + auth (email/password
-**and** Sign in with Google), provider-generic `email_accounts`, Gmail OAuth
-connect, and raw message sync. No classifier, threading, or designed UI yet —
-those are later steps. A throwaway `/debug` view validates the data flow.
+Working end to end: Gmail sync, participant-set threading, the Contact/Company
+classifier, the chat and list views, reply and compose, delete, read/unread,
+search, and a landing page. See **[ROADMAP.md](./ROADMAP.md)** for what's shipped
+and what's next.
+
+Not yet production-ready — Gmail refresh tokens are stored unencrypted, which
+needs fixing before anyone but the developer connects an account.
 
 ## Stack
 

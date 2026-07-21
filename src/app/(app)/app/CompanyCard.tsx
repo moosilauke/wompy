@@ -4,6 +4,7 @@ import { useState } from "react";
 import { MessageMenu } from "./MessageMenu";
 import { MessageModal } from "./MessageModal";
 import { AttachmentList } from "@/components/ui/AttachmentChip";
+import { ReactionBadges } from "@/components/ui/ReactionBadges";
 import { bubbleTime, dayDividerLabel } from "@/lib/format";
 import type { CompanyMessage } from "./CompanyPane";
 
@@ -51,6 +52,12 @@ export function CompanyCard({
           )}
 
           <AttachmentList attachments={message.attachments} />
+
+          {message.reactions.length > 0 && (
+            <div className="mt-2">
+              <ReactionBadges reactions={message.reactions} />
+            </div>
+          )}
         </div>
       </MessageMenu>
 

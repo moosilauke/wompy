@@ -9,6 +9,12 @@ import {
 import { htmlToText, normalizeSnippet } from "@/lib/email/text";
 import { buildExcerpt } from "@/lib/email/excerpt";
 import { extractAttachments } from "@/lib/email/attachments";
+import { extractReaction } from "@/lib/email/reactions";
+import {
+  linkPendingReactions,
+  storeReactions,
+  type StoredReaction,
+} from "@/lib/email/reaction-store";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -78,6 +84,7 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     string,
     ReturnType<typeof extractAttachments>
   >();
+  const reactions: StoredReaction[] = [];
   for (const id of boundedIds) {
     const full = (
       await gmail.users.messages.get({
@@ -86,7 +93,24 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
         format: "full",
       })
     ).data;
-    rows.push(mapMessageToRow(account, full));
+    const row = mapMessageToRow(account, full);
+
+    // A reaction is an ordinary email carrying a specially-typed part. Recorded
+    // separately and flagged, so it renders as a badge on its target rather
+    // than as a one-character reply in the conversation.
+    const emoji = full.payload ? extractReaction(full.payload) : null;
+    if (emoji) {
+      reactions.push({
+        gmailMessageId: id,
+        targetMessageIdHeader: row.in_reply_to,
+        fromAddress: row.from_address ?? "",
+        emoji,
+        reactedAt: row.internal_date,
+      });
+      row.is_reaction = true;
+    }
+
+    rows.push(row);
 
     const attachments = extractAttachments(full.payload ?? undefined);
     if (attachments.length > 0) attachmentsByGmailId.set(id, attachments);
@@ -112,6 +136,14 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     upserted = stored?.length ?? rows.length;
 
     await storeAttachments(account.user_id, stored ?? [], attachmentsByGmailId);
+
+    // After the messages exist, so a reaction can resolve a target that arrived
+    // in this same batch.
+    if (reactions.length > 0) {
+      await storeReactions(account.user_id, reactions);
+    }
+    // Attach any reaction whose target was synced later than the reaction was.
+    await linkPendingReactions(account.user_id);
 
     // 4. Group into participant-set threads (MVP step 3). Runs inside sync so
     //    there's no separate trigger to remember.
@@ -279,6 +311,9 @@ function mapMessageToRow(
     subject: headers["subject"] ?? null,
     message_id_header: headers["message-id"] ?? null,
     in_reply_to: headers["in-reply-to"] ?? null,
+    // Set by the caller when a reaction part is found; the conversation view
+    // filters these out.
+    is_reaction: false,
     references_header: headers["references"] ?? null,
     // Gmail returns snippets HTML-escaped (`YOU&#39;VE`); decode at ingest so
     // every consumer gets clean text.

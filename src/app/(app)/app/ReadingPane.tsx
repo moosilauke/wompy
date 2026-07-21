@@ -7,6 +7,10 @@ import {
   AttachmentList,
   type AttachmentInfo,
 } from "@/components/ui/AttachmentChip";
+import {
+  ReactionBadges,
+  type ReactionSummary,
+} from "@/components/ui/ReactionBadges";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
@@ -22,6 +26,7 @@ export interface PaneMessage {
   /** True when the message had only an HTML part (see note in the bubble). */
   htmlOnly: boolean;
   attachments: AttachmentInfo[];
+  reactions: ReactionSummary[];
   sentAt: string | null;
 }
 
@@ -133,6 +138,13 @@ export function ReadingPane({
                     />
                   </MessageBody>
                 </Bubble>
+
+                {/* Below the bubble, not inside it: a reaction is a response TO
+                    the message, and nesting it would imply the sender wrote it. */}
+                <ReactionBadges
+                  reactions={msg.reactions}
+                  outgoing={msg.outgoing}
+                />
               </BubbleRow>
             </div>
           ))

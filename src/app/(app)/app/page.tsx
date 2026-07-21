@@ -21,6 +21,7 @@ import { ToastProvider } from "./Toasts";
 import { MarkThreadRead } from "./MarkThreadRead";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
+import type { ReactionSummary } from "@/components/ui/ReactionBadges";
 
 /**
  * The authenticated app shell: contact rail + reading pane, per the design spec.
@@ -96,6 +97,9 @@ export default async function AppPage({
       .select("thread_id, snippet, internal_date, label_ids")
       .not("thread_id", "is", null)
       .is("trashed_at", null)
+      // Reaction carriers aren't messages: previewing one would make the rail
+      // show a bare emoji as the conversation's latest content.
+      .eq("is_reaction", false)
       .order("internal_date", { ascending: false })
       .limit(400),
     // All threads, newest activity first. Fetched whole so the tab counts are
@@ -265,6 +269,8 @@ export default async function AppPage({
       )
       .eq("thread_id", selected.id)
       .is("trashed_at", null)
+      // Reactions render as badges on their target, not as their own bubbles.
+      .eq("is_reaction", false)
       // Fetched newest-first so the limit keeps the most RECENT messages, then
       // reversed below for display. Ordering ascending here would silently take
       // the oldest 200 of a long conversation.
@@ -276,13 +282,40 @@ export default async function AppPage({
     const messageIds = ((messageRows ?? []) as { id: string }[]).map(
       (m) => m.id,
     );
-    const { data: attachmentRows } =
+    const [{ data: attachmentRows }, { data: reactionRows }] =
       messageIds.length > 0
-        ? await supabase
-            .from("attachments")
-            .select("id, message_id, filename, mime_type, size_bytes")
-            .in("message_id", messageIds)
-        : { data: [] };
+        ? await Promise.all([
+            supabase
+              .from("attachments")
+              .select("id, message_id, filename, mime_type, size_bytes")
+              .in("message_id", messageIds),
+            supabase
+              .from("reactions")
+              .select("id, message_id, emoji, from_address")
+              .in("message_id", messageIds),
+          ])
+        : [{ data: [] }, { data: [] }];
+
+    // Grouped by target and collapsed by emoji, so three thumbs-up render as
+    // one badge with a count rather than three identical badges.
+    const reactionsByMessage = new Map<string, ReactionSummary[]>();
+    for (const row of (reactionRows ?? []) as {
+      message_id: string;
+      emoji: string;
+      from_address: string;
+    }[]) {
+      const list = reactionsByMessage.get(row.message_id) ?? [];
+      const existing = list.find((r) => r.emoji === row.emoji);
+      const who = parseAddress(row.from_address);
+      const name = who?.displayName || who?.address || "someone";
+      if (existing) {
+        existing.count += 1;
+        existing.people.push(name);
+      } else {
+        list.push({ emoji: row.emoji, count: 1, people: [name] });
+      }
+      reactionsByMessage.set(row.message_id, list);
+    }
 
     const attachmentsByMessage = new Map<string, AttachmentInfo[]>();
     for (const row of (attachmentRows ?? []) as {
@@ -345,6 +378,7 @@ export default async function AppPage({
           // text above is the message, and a "preview only" note would be wrong.
           htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
           attachments: attachmentsByMessage.get(m.id) ?? [],
+          reactions: reactionsByMessage.get(m.id) ?? [],
           sentAt: m.internal_date,
         };
       });
@@ -369,6 +403,7 @@ export default async function AppPage({
           // text above is the message, and a "preview only" note would be wrong.
           htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
           attachments: attachmentsByMessage.get(m.id) ?? [],
+          reactions: reactionsByMessage.get(m.id) ?? [],
           sentAt: m.internal_date,
         };
       });

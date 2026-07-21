@@ -1,6 +1,7 @@
 import { Avatar } from "@/components/ui/Avatar";
 import { CompanyCard } from "./CompanyCard";
 import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
+import type { ReactionSummary } from "@/components/ui/ReactionBadges";
 import { ScrollToLatest } from "./ScrollToLatest";
 
 export interface CompanyMessage {
@@ -13,6 +14,7 @@ export interface CompanyMessage {
   truncated: boolean;
   htmlOnly: boolean;
   attachments: AttachmentInfo[];
+  reactions: ReactionSummary[];
   sentAt: string | null;
 }
 

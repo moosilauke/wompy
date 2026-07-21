@@ -10,6 +10,7 @@ import {
   unreadMessageIdsInThread,
   untrashMessages,
 } from "@/lib/gmail/actions";
+import { reclassifyThread } from "@/lib/email/reclassify";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -23,9 +24,17 @@ import type { EmailAccount } from "@/lib/types";
  *   { action: "trash" | "untrash" | "read" | "unread",
  *     threadId?: string,      // act on the whole conversation
  *     messageIds?: string[] } // or specific messages
+ *
+ *   { action: "reclassify", threadId, tab }
  */
 
-const SUPPORTED = new Set(["trash", "untrash", "read", "unread"]);
+const SUPPORTED = new Set([
+  "trash",
+  "untrash",
+  "read",
+  "unread",
+  "reclassify",
+]);
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured) {
@@ -47,6 +56,7 @@ export async function POST(request: Request) {
     action?: string;
     threadId?: string;
     messageIds?: string[];
+    tab?: string;
   };
   try {
     payload = await request.json();
@@ -57,6 +67,31 @@ export async function POST(request: Request) {
   const action = payload.action ?? "";
   if (!SUPPORTED.has(action)) {
     return NextResponse.json({ error: "unsupported_action" }, { status: 400 });
+  }
+
+  // Reclassify is handled before the Gmail account lookup: it only rewrites our
+  // own classification, touching no mail and needing no provider connection.
+  if (action === "reclassify") {
+    const tab = payload.tab;
+    if (tab !== "contact" && tab !== "company" && tab !== "spam") {
+      return NextResponse.json({ error: "invalid_tab" }, { status: 400 });
+    }
+    if (!payload.threadId) {
+      return NextResponse.json({ error: "no_target" }, { status: 400 });
+    }
+
+    try {
+      const result = await reclassifyThread(userId, payload.threadId, tab);
+      return NextResponse.json({ ok: true, action, ...result });
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: "action_failed",
+          detail: err instanceof Error ? err.message : "unknown",
+        },
+        { status: 500 },
+      );
+    }
   }
 
   // Resolve the acting account.

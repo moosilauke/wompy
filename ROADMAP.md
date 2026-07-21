@@ -34,6 +34,14 @@ Last updated: 2026-07-21
 - Attachments: inline chips in the bubble, downloaded from Gmail on demand
   (metadata only, no duplicated blobs). Inline images and duplicate `.ics`
   encodings filtered out
+- **Manual override** — right-click a conversation → Move to Contacts /
+  Companies / Spam. Recorded against the sender, so it holds for future
+  conversations too, and survives every classify run. This was the last unbuilt
+  item from the original MVP build order; misclassifications no longer need a
+  developer to fix.
+- Organization names derived for functional addresses (`no-reply@sentinelone.com`
+  → "SentinelOne"), only where the local part is generic and the domain isn't
+  free-mail
 - Landing page that IS the app shell, statically rendered
 - Unified sign-in/sign-up in a modal
 
@@ -60,19 +68,7 @@ Last updated: 2026-07-21
 
 ## Next up
 
-### 1. Manual override for classification
-The last unbuilt item from the original MVP build order, and the one with the
-most evidence behind it: the classifier has now been wrong in the field three
-times (Abigail → Companies, Hyundai → Contacts, spam → Contacts). Each time the
-fix was a code change.
-
-`contacts.manually_overridden` already exists and the classifier already
-respects it — there is no UI. Right-click a rail row → "Move to Contacts /
-Companies / Spam".
-
-Until this exists, every misclassification needs a developer.
-
-### 2. Key rotation path
+### 1. Key rotation path
 Tokens are encrypted, but there's no way to re-key without every user
 reconnecting. The `v1:` envelope prefix was designed for this — a rotation
 script would decrypt with the old key and re-encrypt with the new one. Not
@@ -107,6 +103,7 @@ urgent, but cheaper to build before there are many rows.
 - **Create groups** — net new messages only allow selecting one recipient currently vs multiple
 - **Add forwarding** — ability to forward a message to another contact(s)
 - **Emoji reactions** — for clients that also support it, add emoji reactions on messages
+- **Special handling of some attachment types** — e.g. for images, preview in modal overlay vs ONLY download (maybe even display thumbnail too?); for calendar invites, option to open in the same calendar as the email provider (e.g. if syncing Gmail, then ICS opens Google Calendar to add calendar invite automatically)
 - **Add icons** — icons will help add visual interest and clue users in more quickly to various functions of a given button/menu
 - **Display full/rich HTML emails** — appears we're converting HTML to text vs selectively rendering some or all of the HTML
 - **Yahoo, Outlook, or iCloud Mail provider** — `src/lib/email/providers.ts` is already a registry

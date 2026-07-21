@@ -69,6 +69,7 @@ export function ContactRail({
                     threadId={thread.id}
                     label={thread.label}
                     unread={thread.unread}
+                    currentTab={activeTab}
                   >
                   <Link
                     href={`/app?tab=${activeTab}&thread=${thread.id}`}

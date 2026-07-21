@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useToasts } from "./Toasts";
+import type { ContactTab } from "@/lib/types";
 
 /**
  * Client helper for running message actions with toast + undo.
@@ -77,5 +78,31 @@ export function useMessageActions() {
     [run, router, notify],
   );
 
-  return { trash, setRead };
+  /**
+   * Move a conversation to another tab.
+   *
+   * The toast confirms it rather than offering undo: the change is recorded
+   * against the sender and persists across syncs, so "undo" would mean a second
+   * override rather than a revert. Moving it back is the same two clicks.
+   */
+  const reclassify = useCallback(
+    async (threadId: string, tab: ContactTab, description: string) => {
+      try {
+        await run({ action: "reclassify", threadId, tab });
+        router.refresh();
+        notify(`${description} moved to ${TAB_LABELS[tab]}`);
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Couldn’t move it");
+      }
+    },
+    [run, router, notify],
+  );
+
+  return { trash, setRead, reclassify };
 }
+
+const TAB_LABELS: Record<ContactTab, string> = {
+  contact: "Contacts",
+  company: "Companies",
+  spam: "Spam",
+};

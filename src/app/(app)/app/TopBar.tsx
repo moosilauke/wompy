@@ -3,15 +3,26 @@
 import { signOut } from "../actions";
 import { SyncPoller } from "./SyncPoller";
 import { Search } from "./Search";
-import type { ContactTab } from "@/lib/types";
+import { MoreMenu } from "./MoreMenu";
+import type { AppView } from "@/lib/types";
 
 /**
- * The two-tab split is the product's primary navigation, not a filter bolted
- * onto one inbox: Contacts get the chat view, Companies get a classic list.
+ * The Contacts/Companies split is the product's primary navigation, not a
+ * filter bolted onto one inbox: Contacts get the chat view, Companies get a
+ * classic list. They stay as first-class tabs.
  */
-const TABS: { id: ContactTab; label: string }[] = [
+const TABS: { id: AppView; label: string }[] = [
   { id: "contact", label: "Contacts" },
   { id: "company", label: "Companies" },
+];
+
+/**
+ * Views you visit deliberately rather than live in. Collapsed behind "More" so
+ * they don't each spend a permanent slot in the nav.
+ */
+const MORE_VIEWS: { id: AppView; label: string }[] = [
+  { id: "sent", label: "Sent" },
+  { id: "trash", label: "Trash" },
   // Quarantine for Gmail-flagged spam. Kept visible (not deleted) so false
   // positives stay recoverable.
   { id: "spam", label: "Spam" },
@@ -29,9 +40,9 @@ export function TopBar({
   onSelectTab,
 }: {
   userEmail: string | null;
-  activeTab: ContactTab;
-  counts: Record<ContactTab, number>;
-  onSelectTab: (tab: ContactTab) => void;
+  activeTab: AppView;
+  counts: Record<AppView, number>;
+  onSelectTab: (tab: AppView) => void;
 }) {
   return (
     <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
@@ -68,6 +79,12 @@ export function TopBar({
               </button>
             );
           })}
+
+          <MoreMenu
+            items={MORE_VIEWS.map((v) => ({ ...v, count: counts[v.id] }))}
+            activeView={activeTab}
+            onSelect={onSelectTab}
+          />
         </nav>
       </div>
 

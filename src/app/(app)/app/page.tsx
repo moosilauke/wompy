@@ -12,9 +12,10 @@ import {
   type PaneThread,
 } from "./ReadingPane";
 import { CompanyPane, type CompanyMessage } from "./CompanyPane";
+import { MessageListPane, type ListedMessage } from "./MessageListPane";
 import { ToastProvider } from "./Toasts";
 import { MarkThreadRead } from "./MarkThreadRead";
-import type { ContactTab } from "@/lib/types";
+import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 
 /**
  * The authenticated app shell: contact rail + reading pane, per the design spec.
@@ -51,8 +52,16 @@ export default async function AppPage({
     Array.isArray(v) ? v[0] : v;
   const requestedThreadId = first(params.thread);
   const tabParam = first(params.tab);
-  const activeTab: ContactTab =
-    tabParam === "company" || tabParam === "spam" ? tabParam : "contact";
+  const activeTab: AppView =
+    tabParam === "company" ||
+    tabParam === "spam" ||
+    tabParam === "sent" ||
+    tabParam === "trash"
+      ? tabParam
+      : "contact";
+  // Sent and Trash are message filters, not thread categories, so they skip the
+  // rail/pane machinery entirely.
+  const threadView: ContactTab = isThreadView(activeTab) ? activeTab : "contact";
 
   // These four queries are independent of each other, so they go out together.
   // Run sequentially they cost ~1.3s of round-trips; in parallel, ~0.25s — the
@@ -65,6 +74,8 @@ export default async function AppPage({
     { data: recentRows },
     { data: threadRows },
     { data: contactRows },
+    { count: sentCount },
+    { count: trashCount },
   ] = await Promise.all([
     // Connected inbox addresses — used to decide which bubbles are "mine".
     supabase.from("email_accounts").select("email"),
@@ -90,6 +101,17 @@ export default async function AppPage({
       .order("last_message_at", { ascending: false, nullsFirst: false }),
     // Display names for participants, gathered during threading.
     supabase.from("contacts").select("address, display_name, tab"),
+    // Counts only — head:true skips returning the rows themselves, since these
+    // just drive the badges in the More menu.
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .contains("label_ids", ["SENT"])
+      .is("trashed_at", null),
+    supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .not("trashed_at", "is", null),
   ]);
 
   // Canonicalized so `Kevincole@`, `kevin.cole@`, and `kevincole+tag@` all match
@@ -128,11 +150,14 @@ export default async function AppPage({
   }[]).filter((t) => snippetByThread.has(t.id));
 
   // Counts are derived from the same filtered list, so a tab badge never
-  // promises conversations the rail won't show.
-  const counts: Record<ContactTab, number> = {
+  // promises conversations the rail won't show. Sent and Trash count messages
+  // rather than threads, since that is what those views list.
+  const counts: Record<AppView, number> = {
     contact: allThreads.filter((t) => t.tab === "contact").length,
     company: allThreads.filter((t) => t.tab === "company").length,
     spam: allThreads.filter((t) => t.tab === "spam").length,
+    sent: sentCount ?? 0,
+    trash: trashCount ?? 0,
   };
 
   const nameByAddress = new Map<string, string | null>(
@@ -191,7 +216,7 @@ export default async function AppPage({
   // anyway — and lets the client switch tabs without a server round-trip.
   // Previously a tab switch re-fetched identical data just to filter it
   // differently.
-  const threads = allThreads.filter((t) => t.tab === activeTab);
+  const threads = allThreads.filter((t) => t.tab === threadView);
 
   // Resolve the selected thread (default: most recent). Done before the rail is
   // built so the open conversation can be excluded from the unread treatment —
@@ -255,7 +280,7 @@ export default async function AppPage({
 
     // Excerpting runs on the server so the client never receives the quoted
     // history and signatures it isn't going to show.
-    if (activeTab === "contact") {
+    if (threadView === "contact") {
       paneMessages = rows.map((m) => {
         const from = parseAddress(m.from_address);
         // HTML-only mail (42% of the corpus) is converted to text rather than
@@ -309,6 +334,59 @@ export default async function AppPage({
     }
   }
 
+  // Sent and Trash: a flat list of messages, independent of thread selection.
+  let listedMessages: ListedMessage[] = [];
+  if (activeTab === "sent" || activeTab === "trash") {
+    const base = supabase
+      .from("messages")
+      .select(
+        "id, thread_id, from_address, to_addresses, subject, snippet, internal_date",
+      )
+      .order("internal_date", { ascending: false })
+      .limit(100);
+
+    const { data: listRows } =
+      activeTab === "sent"
+        ? await base.contains("label_ids", ["SENT"]).is("trashed_at", null)
+        : await base.not("trashed_at", "is", null);
+
+    const tabByThread = new Map(
+      ((threadRows ?? []) as { id: string; tab: ContactTab }[]).map((t) => [
+        t.id,
+        t.tab,
+      ]),
+    );
+
+    listedMessages = ((listRows ?? []) as {
+      id: string;
+      thread_id: string | null;
+      from_address: string | null;
+      to_addresses: string[] | null;
+      subject: string | null;
+      snippet: string | null;
+      internal_date: string | null;
+    }[]).map((m) => {
+      // Sent mail is identified by its recipient, received mail by its sender —
+      // "from me" on every row of Sent would carry no information.
+      const counterpart =
+        activeTab === "sent"
+          ? parseAddress(m.to_addresses?.[0] ?? null)
+          : parseAddress(m.from_address);
+      const address = counterpart?.address ?? "";
+      return {
+        id: m.id,
+        threadId: m.thread_id,
+        threadTab: m.thread_id ? tabByThread.get(m.thread_id) ?? null : null,
+        personLabel:
+          counterpart?.displayName || labelFor(address) || "(unknown)",
+        personAddress: address,
+        subject: m.subject,
+        preview: normalizeSnippet(m.snippet) ?? "",
+        sentAt: m.internal_date,
+      };
+    });
+  }
+
   return (
     <ToastProvider>
       {/* Renders nothing; fires the mark-read request for the open thread. */}
@@ -326,9 +404,12 @@ export default async function AppPage({
         selectedId={selected?.id ?? null}
         contactSuggestions={contactSuggestions}
       >
-        {/* Spam uses the classic list view too — you skim it for false
+        {/* Sent and Trash cut across threads, so they replace the pane with a
+            flat list. Spam uses the classic list view — you skim it for false
             positives, you don't hold conversations in it. */}
-        {activeTab === "contact" ? (
+        {activeTab === "sent" || activeTab === "trash" ? (
+          <MessageListPane view={activeTab} messages={listedMessages} />
+        ) : activeTab === "contact" ? (
           <ReadingPane thread={paneThread} messages={paneMessages} />
         ) : (
           <CompanyPane

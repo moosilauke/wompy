@@ -6,6 +6,22 @@
  * positives. */
 export type ContactTab = "contact" | "company" | "spam";
 
+/**
+ * A view in the top bar.
+ *
+ * Deliberately wider than ContactTab. Contacts/Companies/Spam classify a thread
+ * — every thread has exactly one, stored in `threads.tab`. Sent and Trash cut
+ * across that: a sent message lives in a conversation that is also in Contacts,
+ * and trashing one message does not move its thread anywhere. So they are
+ * filters over messages, not thread categories, and render as flat lists.
+ */
+export type AppView = ContactTab | "sent" | "trash";
+
+/** Views backed by `threads.tab`, which get the rail + reading pane layout. */
+export function isThreadView(view: AppView): view is ContactTab {
+  return view === "contact" || view === "company" || view === "spam";
+}
+
 export interface ThreadRow {
   id: string;
   user_id: string;

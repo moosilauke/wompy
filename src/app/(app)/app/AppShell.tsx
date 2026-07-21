@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { TopBar } from "./TopBar";
 import { ContactRail, type RailThread } from "./ContactRail";
 import type { ContactSuggestion } from "./NewMessage";
-import type { ContactTab } from "@/lib/types";
+import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 
 /**
  * Client shell owning the active tab.
@@ -30,16 +30,16 @@ export function AppShell({
   children,
 }: {
   userEmail: string | null;
-  initialTab: ContactTab;
-  counts: Record<ContactTab, number>;
+  initialTab: AppView;
+  counts: Record<AppView, number>;
   railByTab: Record<ContactTab, RailThread[]>;
   selectedId: string | null;
   contactSuggestions: ContactSuggestion[];
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [selectedTab, setSelectedTab] = useState<ContactTab>(initialTab);
-  const [lastServerTab, setLastServerTab] = useState<ContactTab>(initialTab);
+  const [selectedTab, setSelectedTab] = useState<AppView>(initialTab);
+  const [lastServerTab, setLastServerTab] = useState<AppView>(initialTab);
 
   // Derive during render rather than syncing in an effect: when the server
   // sends a different tab (a back/forward navigation, or the poller's
@@ -53,7 +53,7 @@ export function AppShell({
     activeTab = initialTab;
   }
 
-  const selectTab = (tab: ContactTab) => {
+  const selectTab = (tab: AppView) => {
     if (tab === activeTab) return;
     setSelectedTab(tab);
 
@@ -65,11 +65,15 @@ export function AppShell({
     url.searchParams.delete("thread");
     window.history.replaceState(null, "", url);
 
-    // The reading pane is server-rendered for the selected thread, which
-    // belongs to the previous tab. Fetch the new tab's default thread in the
-    // background; the rail is already correct and stays interactive.
+    // Thread views render instantly from the rail data already held for every
+    // tab; the server fetch behind them only fills in the reading pane. Sent and
+    // Trash have no client-side data, so they genuinely wait on the server.
     router.replace(`/app?tab=${tab}`, { scroll: false });
   };
+
+  // Sent and Trash are flat message lists with no conversation rail. Held as a
+  // narrowed value rather than a boolean so the rail's props typecheck.
+  const railTab = isThreadView(activeTab) ? activeTab : null;
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
@@ -80,12 +84,14 @@ export function AppShell({
         onSelectTab={selectTab}
       />
       <div className="flex min-h-0 flex-1">
-        <ContactRail
-          threads={railByTab[activeTab]}
-          selectedId={selectedId}
-          activeTab={activeTab}
-          contactSuggestions={contactSuggestions}
-        />
+        {railTab && (
+          <ContactRail
+            threads={railByTab[railTab]}
+            selectedId={selectedId}
+            activeTab={railTab}
+            contactSuggestions={contactSuggestions}
+          />
+        )}
         {children}
       </div>
     </div>

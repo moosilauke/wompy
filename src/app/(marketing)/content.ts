@@ -21,15 +21,15 @@ export const DEMO_CONTACTS = [
   {
     name: "Mom",
     address: "mom@example.com",
-    snippet: "Call me later? no rush",
+    snippet: "Call me later? No rush sweetie",
     time: "2h",
     unread: false,
     active: false,
   },
   {
-    name: "That Dude From College",
+    name: "Dude McDuderson",
     address: "dude@example.com",
-    snippet: "yo it's been way too long",
+    snippet: "yo it's been way too long brah",
     time: "4h",
     unread: false,
     active: false,
@@ -43,7 +43,7 @@ export const DEMO_CONTACTS = [
     active: false,
   },
   {
-    name: "Lionel Messi",
+    name: "Erling Haaland",
     address: "leo@example.com",
     snippet: "See you at practice ⚽",
     time: "1d",
@@ -71,8 +71,8 @@ export const DEMO_CONTACTS = [
 /** The three feature bubbles, each with a coloured icon chip. */
 export const FEATURES = [
   {
-    title: "One chat per person",
-    body: "No threads to untangle — everything from someone lives in one place.",
+    title: "One chat per person or group",
+    body: "No threads to untangle and everything from someone lives in one place.",
     chip: "bg-avatar-blue",
   },
   {
@@ -81,8 +81,8 @@ export const FEATURES = [
     chip: "bg-avatar-sage",
   },
   {
-    title: "Cuts the busywork",
-    body: "No subject lines, no signatures — just write what you mean.",
+    title: "Cuts the bloat",
+    body: "No subject lines, no signatures, no AI slop. Just write what you mean.",
     chip: "bg-avatar-terracotta",
   },
 ] as const;

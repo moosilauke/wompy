@@ -2,23 +2,31 @@
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured, NEXT_PUBLIC_APP_URL } from "@/lib/env";
 import { GMAIL_SCOPES } from "@/lib/email/providers";
 
-type Mode = "login" | "signup";
-
-/** Minimal email/password auth form. Deliberately plain — the designed Log in /
- * Sign up UI from the design spec comes in a later session.
+/**
+ * One form for signing in and signing up.
  *
- * Renders a setup notice until Supabase credentials are configured. The check
+ * A visitor doesn't know or care whether they "have an account" — that's a
+ * question the product can answer for them. So there is no mode toggle: submit
+ * an address and a password, and the right thing happens.
+ *
+ * The order (sign in first, then sign up) is forced by Supabase's
+ * anti-enumeration behaviour: `signUp` on an address that already exists
+ * returns a deliberately obfuscated response rather than a clear error, so it
+ * can't be used to probe. `signInWithPassword` fails cleanly and unambiguously,
+ * which makes it the safe thing to try first.
+ *
+ * Renders a setup notice until Supabase credentials are configured. That check
  * lives in this outer component (no hooks) so the inner form's hooks always run
- * unconditionally. */
-export function AuthForm({ mode }: { mode: Mode }) {
+ * unconditionally.
+ */
+export function AuthForm() {
   if (!isSupabaseConfigured) {
     return (
-      <div className="w-full max-w-sm">
+      <div className="w-full">
         <h1 className="font-display text-2xl font-bold mb-2">Almost there</h1>
         <p className="text-text-muted text-sm">
           Supabase isn’t configured yet. Copy{" "}
@@ -31,10 +39,13 @@ export function AuthForm({ mode }: { mode: Mode }) {
     );
   }
 
-  return <AuthFormFields mode={mode} />;
+  return <AuthFormFields />;
 }
 
-function AuthFormFields({ mode }: { mode: Mode }) {
+/** Supabase's message for a failed password sign-in. */
+const INVALID_CREDENTIALS = "invalid login credentials";
+
+function AuthFormFields() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const supabase = createClient();
@@ -45,34 +56,69 @@ function AuthFormFields({ mode }: { mode: Mode }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Set when the address belongs to an account that has no password, so the
+  // form can point at Google instead of repeating a failure the user can't fix.
+  const [useGoogleInstead, setUseGoogleInstead] = useState(false);
   const [pending, setPending] = useState(false);
 
   const next = searchParams.get("next") || "/app";
+
+  function finish() {
+    router.push(next);
+    router.refresh();
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setNotice(null);
+    setUseGoogleInstead(false);
     setPending(true);
 
     try {
-      if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        // If email confirmation is enabled, there's no session yet.
-        if (!data.session) {
-          setNotice("Check your email to confirm your account, then log in.");
-          return;
-        }
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (error) throw error;
+      // 1. Assume they're returning. This is the common case for anyone past
+      //    their first visit, and it fails cleanly if they're not.
+      const signIn = await supabase.auth.signInWithPassword({ email, password });
+      if (!signIn.error) {
+        finish();
+        return;
       }
-      router.push(next);
-      router.refresh();
+
+      const message = signIn.error.message.toLowerCase();
+      if (!message.includes(INVALID_CREDENTIALS)) {
+        // Something other than a credential mismatch — rate limiting, an
+        // unconfirmed address, a network failure. Report it as-is rather than
+        // creating an account in response to an unrelated problem.
+        throw signIn.error;
+      }
+
+      // 2. Credentials didn't match. Either the account doesn't exist yet, or
+      //    it does and the password is wrong.
+      const signUp = await supabase.auth.signUp({ email, password });
+      if (signUp.error) throw signUp.error;
+
+      // Supabase signals "this address is already registered" by returning a
+      // user with an empty identities array — the obfuscated response that
+      // avoids confirming the address exists. There is no new account here.
+      const alreadyRegistered = (signUp.data.user?.identities?.length ?? 0) === 0;
+      if (alreadyRegistered) {
+        // The account exists but the password didn't work. The likeliest cause
+        // is that it was created with Google and has no password at all, so
+        // offer that route as well as the plain wrong-password reading.
+        setUseGoogleInstead(true);
+        setError(
+          "That didn’t match. If you created this account with Google, use the button above.",
+        );
+        return;
+      }
+
+      if (!signUp.data.session) {
+        // Email confirmation is enabled, so there's no session yet.
+        setNotice("Check your email to confirm your account, then come back.");
+        return;
+      }
+
+      finish();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -110,21 +156,16 @@ function AuthFormFields({ mode }: { mode: Mode }) {
   }
 
   return (
-    <div className="w-full max-w-sm">
-      <h1 className="font-display text-2xl font-bold mb-1">
-        {mode === "signup" ? "Create your account" : "Welcome back"}
-      </h1>
-      <p className="text-text-muted mb-6 text-sm">
-        {mode === "signup"
-          ? "Sign up with Google to connect Gmail in one step, or use email."
-          : "Log in to Wompy."}
-      </p>
-
+    <div className="w-full">
       <button
         type="button"
         onClick={handleGoogle}
         disabled={pending}
-        className="mb-4 flex w-full items-center justify-center gap-2 rounded-[100px] border border-black/15 bg-white px-5 py-2.5 font-bold text-text-body transition-opacity disabled:opacity-60"
+        className={`flex w-full items-center justify-center gap-2 rounded-[100px] border bg-white px-5 py-2.5 font-bold text-text-body transition-all disabled:opacity-60 ${
+          useGoogleInstead
+            ? "border-coral ring-2 ring-coral/30"
+            : "border-black/15"
+        }`}
       >
         <span
           aria-hidden
@@ -133,7 +174,11 @@ function AuthFormFields({ mode }: { mode: Mode }) {
         Continue with Google
       </button>
 
-      <div className="mb-4 flex items-center gap-3 text-xs text-text-muted-2">
+      <p className="mt-2 text-center text-[12px] text-text-muted-2">
+        Connects Gmail in the same step.
+      </p>
+
+      <div className="my-4 flex items-center gap-3 text-xs text-text-muted-2">
         <span className="h-px flex-1 bg-black/10" />
         or
         <span className="h-px flex-1 bg-black/10" />
@@ -158,9 +203,9 @@ function AuthFormFields({ mode }: { mode: Mode }) {
             type="password"
             required
             minLength={6}
-            autoComplete={
-              mode === "signup" ? "new-password" : "current-password"
-            }
+            // Neither "new-password" nor "current-password" is right when the
+            // form serves both; this lets a password manager offer either.
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="rounded-[14px] border border-black/10 bg-white px-4 py-2.5 font-normal outline-none focus:border-mint"
@@ -175,30 +220,12 @@ function AuthFormFields({ mode }: { mode: Mode }) {
           disabled={pending}
           className="mt-2 rounded-[100px] bg-coral px-5 py-2.5 font-bold text-white shadow-[0_4px_14px_rgba(226,114,90,0.35)] transition-opacity disabled:opacity-60"
         >
-          {pending
-            ? "…"
-            : mode === "signup"
-              ? "Create account"
-              : "Log in"}
+          {pending ? "…" : "Continue"}
         </button>
       </form>
 
-      <p className="mt-5 text-sm text-text-muted">
-        {mode === "signup" ? (
-          <>
-            Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-spruce underline">
-              Log in
-            </Link>
-          </>
-        ) : (
-          <>
-            New to Wompy?{" "}
-            <Link href="/signup" className="font-semibold text-spruce underline">
-              Create an account
-            </Link>
-          </>
-        )}
+      <p className="mt-4 text-center text-[12px] text-text-muted-2">
+        New here? We’ll create your account. Already have one? We’ll sign you in.
       </p>
     </div>
   );

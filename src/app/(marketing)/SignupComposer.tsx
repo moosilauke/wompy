@@ -22,14 +22,16 @@ export function SignupComposer() {
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed) return;
-    router.push(`/signup?email=${encodeURIComponent(trimmed)}`);
+    // Opens the auth modal in place rather than navigating away, with the
+    // address carried over so it isn't typed twice.
+    router.push(`/?auth=1&email=${encodeURIComponent(trimmed)}`, {
+      scroll: false,
+    });
   };
 
   return (
     <div className="shrink-0 border-t border-black/[0.06] bg-cream px-7 py-4 shadow-[0_-4px_18px_rgba(0,0,0,0.05)]">
-      <p className="mb-2 text-center text-[12px] font-bold text-text-muted-3">
-        Joined by 12,000+ early users
-      </p>
+
       <form onSubmit={submit} className="flex items-center gap-2.5">
         <input
           type="email"

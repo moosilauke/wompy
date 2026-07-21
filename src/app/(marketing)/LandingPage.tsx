@@ -1,7 +1,8 @@
-import Link from "next/link";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { Bubble, BubbleRow, DayDivider } from "@/components/ui/Bubble";
 import { RailRow } from "@/components/ui/RailRow";
+import { AuthModal } from "./AuthModal";
+import { AuthTrigger } from "./AuthTrigger";
 import { MoreLinks } from "./MoreLinks";
 import { SignupComposer } from "./SignupComposer";
 import { DEMO_CONTACTS, FEATURES, PLANS } from "./content";
@@ -42,20 +43,7 @@ export function LandingPage() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-4">
-          <Link
-            href="/login"
-            className="text-[13px] font-bold text-on-spruce-muted transition-colors hover:text-white"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/signup"
-            className="rounded-full bg-coral px-[18px] py-[9px] text-[13px] font-extrabold text-white shadow-[0_4px_12px_oklch(0.5_0.12_25_/_0.4)] transition-opacity hover:opacity-90"
-          >
-            Sign up free
-          </Link>
-        </div>
+        <AuthTrigger />
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -127,8 +115,9 @@ export function LandingPage() {
             <BubbleRow>
               <Bubble>
                 <p>
-                  I turn your inbox into one long conversation per person — no
-                  threads to dig through, no subject lines, no signatures.
+                  I turn your inbox into one continuous conversation per
+                  person. It&rsquo;s email built like texting in 2026, not
+                  letter-writing in 1926.
                 </p>
               </Bubble>
             </BubbleRow>
@@ -185,6 +174,9 @@ export function LandingPage() {
           <SignupComposer />
         </section>
       </div>
+
+      {/* Renders nothing until ?auth=1 is present. */}
+      <AuthModal />
     </div>
   );
 }

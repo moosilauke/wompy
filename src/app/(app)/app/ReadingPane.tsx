@@ -1,6 +1,7 @@
 import { Avatar } from "./Avatar";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
+import { ScrollToLatest } from "./ScrollToLatest";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
@@ -88,7 +89,11 @@ export function ReadingPane({
       </div>
 
       {/* Messages */}
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-10 py-7">
+      <ScrollToLatest
+        threadId={thread.id}
+        messageCount={messages.length}
+        className="flex flex-1 flex-col gap-3 overflow-y-auto px-10 py-7"
+      >
         {messages.length === 0 ? (
           <p className="text-center text-sm text-text-muted">
             No messages in this conversation yet.
@@ -122,7 +127,6 @@ export function ReadingPane({
                     full={msg.fullBody}
                     truncated={msg.truncated}
                     removed={msg.removed}
-                    outgoing={msg.outgoing}
                     title={msg.outgoing ? "Your message" : thread.label}
                     subtitle={dayDividerLabel(msg.sentAt)}
                   >
@@ -145,7 +149,7 @@ export function ReadingPane({
             </div>
           ))
         )}
-      </div>
+      </ScrollToLatest>
 
       <Composer threadId={thread.id} recipientLabel={thread.label} />
     </section>

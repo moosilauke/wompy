@@ -1,5 +1,6 @@
 import { Avatar } from "./Avatar";
 import { CompanyCard } from "./CompanyCard";
+import { ScrollToLatest } from "./ScrollToLatest";
 
 export interface CompanyMessage {
   id: string;
@@ -74,7 +75,11 @@ export function CompanyPane({
       </div>
 
       {/* Classic list: one card per message, subject foremost. */}
-      <div className="flex-1 overflow-y-auto px-7 py-6">
+      <ScrollToLatest
+        threadId={thread.id}
+        messageCount={messages.length}
+        className="flex-1 overflow-y-auto px-7 py-6"
+      >
         {isSpam && (
           <p className="mb-4 rounded-[14px] border border-coral/25 bg-coral/10 px-4 py-3 text-[13px] text-text-muted">
             Gmail flagged this sender as spam. Nothing here is deleted — if this
@@ -98,7 +103,7 @@ export function CompanyPane({
             ))}
           </ul>
         )}
-      </div>
+      </ScrollToLatest>
     </section>
   );
 }

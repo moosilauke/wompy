@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MessageMenu } from "./MessageMenu";
 import { MessageModal } from "./MessageModal";
+import { expandLabel } from "./MessageBody";
 import { bubbleTime, dayDividerLabel } from "@/lib/format";
 import type { CompanyMessage } from "./CompanyPane";
 
@@ -23,19 +24,12 @@ export function CompanyCard({
 }) {
   const [open, setOpen] = useState(false);
 
-  const label = (() => {
-    if (message.removed.quotedHistory && message.removed.signature)
-      return "Show signature and quoted replies";
-    if (message.removed.quotedHistory) return "Show quoted replies";
-    if (message.removed.signature) return "Show signature";
-    return "Show full message";
-  })();
-
   return (
     <>
       <MessageMenu
         messageId={message.id}
         onShowFull={message.truncated ? () => setOpen(true) : undefined}
+        showFullLabel={expandLabel(message.removed)}
       >
         <div className="rounded-[14px] border border-black/[0.06] bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
           <div className="mb-1.5 flex items-baseline justify-between gap-4">
@@ -50,16 +44,6 @@ export function CompanyCard({
           <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.5] text-text-muted">
             {message.body ?? ""}
           </p>
-
-          {message.truncated && (
-            <button
-              type="button"
-              onClick={() => setOpen(true)}
-              className="mt-1.5 text-[12.5px] font-bold text-coral underline underline-offset-2 transition-opacity hover:opacity-80"
-            >
-              {label}
-            </button>
-          )}
 
           {message.htmlOnly && (
             <p className="mt-2 text-[11px] text-text-muted-3">

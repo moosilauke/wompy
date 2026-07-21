@@ -211,11 +211,13 @@ export default async function AppPage({
       )
       .eq("thread_id", selected.id)
       .is("trashed_at", null)
-      .order("internal_date", { ascending: activeTab === "contact" })
-      // Newest-first for the list views; chronological for the chat view.
+      // Fetched newest-first so the limit keeps the most RECENT messages, then
+      // reversed below for display. Ordering ascending here would silently take
+      // the oldest 200 of a long conversation.
+      .order("internal_date", { ascending: false })
       .limit(200);
 
-    const rows = (messageRows ?? []) as {
+    const rows = ((messageRows ?? []) as {
       id: string;
       from_address: string | null;
       subject: string | null;
@@ -224,12 +226,14 @@ export default async function AppPage({
       snippet: string | null;
       internal_date: string | null;
       label_ids: string[] | null;
-    }[];
+    }[])
+      // Chronological for display: oldest first, newest at the bottom. Both
+      // views read the same way — a conversation runs down the page, and the
+      // most recent message is where you land.
+      .reverse();
 
     // Excerpting runs on the server so the client never receives the quoted
-    // history and signatures it isn't going to show. `full` is the structurally
-    // cleaned body — the expanded view drops boilerplate too, since nobody wants
-    // five levels of quote chain even when they ask for "more".
+    // history and signatures it isn't going to show.
     if (activeTab === "contact") {
       paneMessages = rows.map((m) => {
         const from = parseAddress(m.from_address);

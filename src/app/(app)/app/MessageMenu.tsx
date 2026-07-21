@@ -13,11 +13,14 @@ import { useMessageActions } from "./useMessageActions";
 export function MessageMenu({
   messageId,
   onShowFull,
+  showFullLabel = "View full message",
   children,
 }: {
   messageId: string;
-  /** Provided when the message was trimmed, so "View full message" applies. */
+  /** Provided when the message was trimmed, so the expand action applies. */
   onShowFull?: () => void;
+  /** Names what was trimmed, e.g. "View quoted replies". */
+  showFullLabel?: string;
   children: React.ReactNode;
 }) {
   const { position, open, close } = useContextMenu();
@@ -30,7 +33,7 @@ export function MessageMenu({
       ? [
           {
             id: "show-full",
-            label: "View full message",
+            label: showFullLabel,
             onSelect: onShowFull,
           },
         ]

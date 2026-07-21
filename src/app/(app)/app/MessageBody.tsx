@@ -5,23 +5,37 @@ import { MessageModal } from "./MessageModal";
 import { MessageMenu } from "./MessageMenu";
 
 /**
- * Message text, its expand affordance, and the right-click menu.
- *
- * These live together because they share one piece of state: whether the full
- * message is open. Both the inline link and the menu's "View full message" need
- * to drive it, so the modal is owned here rather than in either one.
+ * Message text, its right-click menu, and the full-message modal.
  *
  * Excerpting happens on the server (see lib/email/excerpt.ts); this renders the
- * result. The inline label names what was cut, so "Show more" never reads as
- * arbitrary — quoted history and a signature are different from a long message.
+ * result. Expanding is offered only through the context menu — an inline link
+ * under every trimmed bubble competed with the message itself for attention,
+ * which is exactly what the chat view is meant to avoid.
  */
+export interface RemovedParts {
+  quotedHistory: boolean;
+  signature: boolean;
+  lengthCapped: boolean;
+}
+
+/**
+ * Name what was trimmed, so the menu item describes the actual content behind
+ * it rather than a generic "show more".
+ */
+export function expandLabel(removed: RemovedParts): string {
+  if (removed.quotedHistory && removed.signature)
+    return "View signature and quoted replies";
+  if (removed.quotedHistory) return "View quoted replies";
+  if (removed.signature) return "View signature";
+  return "View full message";
+}
+
 export function MessageBody({
   messageId,
   excerpt,
   full,
   truncated,
   removed,
-  outgoing = false,
   title,
   subtitle,
   children,
@@ -30,8 +44,7 @@ export function MessageBody({
   excerpt: string;
   full: string;
   truncated: boolean;
-  removed: { quotedHistory: boolean; signature: boolean; lengthCapped: boolean };
-  outgoing?: boolean;
+  removed: RemovedParts;
   title: string;
   subtitle?: string | null;
   /** Extra content rendered inside the bubble, below the text. */
@@ -39,34 +52,14 @@ export function MessageBody({
 }) {
   const [open, setOpen] = useState(false);
 
-  const label = (() => {
-    if (removed.quotedHistory && removed.signature)
-      return "Show signature and quoted replies";
-    if (removed.quotedHistory) return "Show quoted replies";
-    if (removed.signature) return "Show signature";
-    return "Show full message";
-  })();
-
   return (
     <>
       <MessageMenu
         messageId={messageId}
         onShowFull={truncated ? () => setOpen(true) : undefined}
+        showFullLabel={expandLabel(removed)}
       >
         <p className="whitespace-pre-wrap break-words">{excerpt}</p>
-
-        {truncated && (
-          <button
-            type="button"
-            onClick={() => setOpen(true)}
-            className={`mt-1.5 text-[12.5px] font-bold underline underline-offset-2 transition-opacity hover:opacity-80 ${
-              outgoing ? "text-white/70" : "text-coral"
-            }`}
-          >
-            {label}
-          </button>
-        )}
-
         {children}
       </MessageMenu>
 

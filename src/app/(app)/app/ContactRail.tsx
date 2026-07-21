@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Avatar } from "@/components/ui/Avatar";
+import { RailRow } from "@/components/ui/RailRow";
 import { railTimestamp } from "@/lib/format";
 import type { ContactTab } from "@/lib/types";
 import { NewMessageButton } from "./NewMessageButton";
@@ -73,55 +73,17 @@ export function ContactRail({
                   <Link
                     href={`/app?tab=${activeTab}&thread=${thread.id}`}
                     aria-current={active ? "true" : undefined}
-                    className={`flex items-center gap-[11px] rounded-xl p-2.5 transition-colors ${
-                      active
-                        ? "bg-[oklch(0.8_0.13_175_/_0.25)]"
-                        : "hover:bg-white/[0.06]"
-                    }`}
+                    className="block"
                   >
-                    <Avatar
+                    <RailRow
                       address={thread.primaryAddress}
                       label={thread.label}
-                      size={44}
+                      timestamp={railTimestamp(thread.lastMessageAt)}
+                      snippet={thread.snippet}
+                      unread={thread.unread}
+                      active={active}
+                      extraParticipants={thread.extraParticipants}
                     />
-                    <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-                      <span className="flex items-baseline justify-between gap-2">
-                        <span
-                          className={`truncate text-sm text-on-spruce ${
-                            thread.unread ? "font-extrabold" : "font-bold"
-                          }`}
-                        >
-                          {thread.label}
-                          {thread.extraParticipants > 0 && (
-                            <span className="font-semibold text-on-spruce-muted">
-                              {" "}
-                              +{thread.extraParticipants}
-                            </span>
-                          )}
-                        </span>
-                        <span className="shrink-0 text-xs text-on-spruce-muted">
-                          {railTimestamp(thread.lastMessageAt)}
-                        </span>
-                      </span>
-
-                      <span className="flex min-w-0 items-center justify-between gap-2">
-                        <span
-                          className={`min-w-0 flex-1 truncate text-[12.5px] ${
-                            thread.unread
-                              ? "font-bold text-on-spruce-bright"
-                              : "font-medium text-on-spruce-muted"
-                          }`}
-                        >
-                          {thread.snippet}
-                        </span>
-                        {thread.unread && (
-                          <span
-                            aria-label="Unread"
-                            className="h-[9px] w-[9px] shrink-0 rounded-full bg-coral"
-                          />
-                        )}
-                      </span>
-                    </span>
                   </Link>
                   </ThreadRowMenu>
                 </li>

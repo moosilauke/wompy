@@ -1,4 +1,5 @@
 import { Avatar } from "@/components/ui/Avatar";
+import { Bubble, BubbleRow, DayDivider } from "@/components/ui/Bubble";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
 import { ScrollToLatest } from "./ScrollToLatest";
@@ -96,25 +97,14 @@ export function ReadingPane({
           messages.map((msg) => (
             <div key={msg.id} className="contents">
               {showDividerFor.has(msg.id) && (
-                <div className="self-center rounded-full bg-divider-bg px-3.5 py-[5px] text-xs font-extrabold tracking-[0.3px] text-divider-text">
-                  {dayDividerLabel(msg.sentAt)}
-                </div>
+                <DayDivider label={dayDividerLabel(msg.sentAt)} />
               )}
 
-              <div
-                className={`flex max-w-[62%] flex-col gap-1 ${
-                  msg.outgoing
-                    ? "items-end self-end"
-                    : "items-start self-start"
-                }`}
+              <BubbleRow
+                outgoing={msg.outgoing}
+                timestamp={bubbleTime(msg.sentAt)}
               >
-                <div
-                  className={
-                    msg.outgoing
-                      ? "rounded-[16px_16px_4px_16px] bg-spruce px-4 py-3 text-[15px] font-medium leading-[1.45] text-white shadow-[0_4px_12px_rgba(29,74,69,0.3)]"
-                      : "rounded-[4px_16px_16px_16px] border border-black/[0.06] bg-bubble-incoming px-4 py-3 text-[15px] font-medium leading-[1.45] text-text-body shadow-[0_2px_8px_rgba(0,0,0,0.05)]"
-                  }
-                >
+                <Bubble outgoing={msg.outgoing}>
                   <MessageBody
                     messageId={msg.id}
                     excerpt={msg.body ?? ""}
@@ -133,12 +123,8 @@ export function ReadingPane({
                       </p>
                     )}
                   </MessageBody>
-                </div>
-
-                <span className="px-1 text-[11.5px] text-text-muted-3">
-                  {bubbleTime(msg.sentAt)}
-                </span>
-              </div>
+                </Bubble>
+              </BubbleRow>
             </div>
           ))
         )}

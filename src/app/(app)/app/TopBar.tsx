@@ -4,6 +4,7 @@ import { signOut } from "../actions";
 import { SyncPoller } from "./SyncPoller";
 import { Search } from "./Search";
 import { MoreMenu } from "./MoreMenu";
+import { BrandMark } from "@/components/ui/BrandMark";
 import type { AppView } from "@/lib/types";
 
 /**
@@ -47,15 +48,7 @@ export function TopBar({
   return (
     <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
       <div className="flex items-center gap-7">
-        <div className="flex items-center gap-[9px]">
-          <span
-            aria-hidden
-            className="inline-block h-7 w-7 shrink-0 rounded-[9px] bg-mint"
-          />
-          <span className="font-display text-[19px] font-bold tracking-[-0.5px] text-white lowercase">
-            wompy
-          </span>
-        </div>
+        <BrandMark />
 
         <nav className="flex items-center gap-1">
           {TABS.map((tab) => {

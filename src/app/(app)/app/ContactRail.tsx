@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Avatar } from "./Avatar";
+import { Avatar } from "@/components/ui/Avatar";
 import { railTimestamp } from "@/lib/format";
 import type { ContactTab } from "@/lib/types";
 import { NewMessageButton } from "./NewMessageButton";

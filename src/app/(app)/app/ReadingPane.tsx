@@ -1,4 +1,4 @@
-import { Avatar } from "./Avatar";
+import { Avatar } from "@/components/ui/Avatar";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
 import { ScrollToLatest } from "./ScrollToLatest";

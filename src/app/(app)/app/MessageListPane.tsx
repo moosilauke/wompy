@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Avatar } from "./Avatar";
+import { Avatar } from "@/components/ui/Avatar";
 import { bubbleTime, dayDividerLabel } from "@/lib/format";
 import type { AppView } from "@/lib/types";
 

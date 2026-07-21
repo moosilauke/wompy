@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Avatar } from "./Avatar";
+import { Avatar } from "@/components/ui/Avatar";
 import { railTimestamp } from "@/lib/format";
 import type { ContactTab } from "@/lib/types";
 

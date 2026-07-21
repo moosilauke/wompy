@@ -45,3 +45,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Design/product reference docs — kept locally for reference, not versioned.
+Claude-Design-wompy-specs.md
+wompy-mvp-plan.md
+*.dc.html

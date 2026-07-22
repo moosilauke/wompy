@@ -54,6 +54,13 @@ Last updated: 2026-07-21
   bubble's bottom-left corner.
 - Landing page that IS the app shell, statically rendered
 - Unified sign-in/sign-up in a modal
+- Admin panel: user list (email, created, last login, login + mail provider,
+  admin flag) with per-row delete / make-admin / password-reset. Three
+  independent access layers — the menu item renders only for admins, the /admin
+  page and /api/admin 404 for non-admins (not 403/redirect, so the panel's
+  existence isn't revealed), and every action re-verifies is_admin server-side
+  against the verified JWT. Self-delete and last-admin removal are blocked; admin
+  state lives in a profiles table, seeded to kevincole@gmail.com.
 
 **Performance** — sync cycle went from ~8s to well under 1s
 - Batched classification writes (was N+1: ~44 sequential round-trips per sync)
@@ -101,7 +108,8 @@ urgent, but cheaper to build before there are many rows.
 - **Payment/subscriptions** — will use Creem
 - **Profile page** — includes email provider config/reconfig, personal settings, avatar upload, etc
 - **Stats page** — unlike Gmail etc, we'll gamify things slightly by displaying some fun stats/metrics/analytics; leans into our brand ethos of being more than just a Gmail clone
-- **Admin panel** — need a place for admins, starting with basic info like seeing all users, basic metadata about them, subscription status, triggering password reset emails, etc
+- **Admin panel** — user list with actions is done (see Shipped). Still to add:
+  subscription status (needs the payments work first)
 - **Transactional emails** — welcome, account confirmation, password reset. Using Resend on another project and will likely use here too.
 - **Continue performance enhancements** — delete is fixed (batched); next
   candidates are per-thread message fetch and the full-mailbox reclassify that

@@ -22,6 +22,7 @@ import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
  */
 export function AppShell({
   userEmail,
+  isAdmin,
   initialTab,
   counts,
   railByTab,
@@ -30,6 +31,7 @@ export function AppShell({
   children,
 }: {
   userEmail: string | null;
+  isAdmin: boolean;
   initialTab: AppView;
   counts: Record<AppView, number>;
   railByTab: Record<ContactTab, RailThread[]>;
@@ -79,6 +81,7 @@ export function AppShell({
     <div className="flex h-screen flex-col overflow-hidden">
       <TopBar
         userEmail={userEmail}
+        isAdmin={isAdmin}
         activeTab={activeTab}
         counts={counts}
         onSelectTab={selectTab}

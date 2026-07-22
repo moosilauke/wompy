@@ -54,7 +54,7 @@ Wompy's "Connect Gmail" flow and Supabase's "Sign in with Google" provider:
    `gmail.modify` scope. Add your own Google account as a test user.
 3. Create an **OAuth 2.0 Client ID** of type **Web application**.
 4. Add **two** authorized redirect URIs:
-   - `http://localhost:3000/api/auth/gmail/callback` (Wompy's Connect Gmail flow)
+   - `http://localhost:<your-port>/api/auth/gmail/callback` (Wompy's Connect Gmail flow)
    - `https://<project-ref>.supabase.co/auth/v1/callback` (Supabase Google auth)
 5. Copy the client ID and secret.
 

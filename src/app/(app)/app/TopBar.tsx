@@ -36,11 +36,13 @@ const MORE_VIEWS: { id: AppView; label: string }[] = [
  */
 export function TopBar({
   userEmail,
+  isAdmin,
   activeTab,
   counts,
   onSelectTab,
 }: {
   userEmail: string | null;
+  isAdmin: boolean;
   activeTab: AppView;
   counts: Record<AppView, number>;
   onSelectTab: (tab: AppView) => void;
@@ -91,6 +93,7 @@ export function TopBar({
         <SyncStatus lastError={lastError} needsReauth={needsReauth} />
         <AccountMenu
           userEmail={userEmail}
+          isAdmin={isAdmin}
           onSync={() => void runSync()}
           syncing={syncing}
         />

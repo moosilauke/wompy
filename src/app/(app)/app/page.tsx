@@ -83,6 +83,7 @@ export default async function AppPage({
     { data: threadRows },
     { data: contactRows },
     { data: readRows },
+    { data: profileRow },
     { count: sentCount },
     { count: trashCount },
   ] = await Promise.all([
@@ -117,6 +118,9 @@ export default async function AppPage({
     // thread's last_message_at — no Gmail round-trip, and it follows the user
     // across devices.
     supabase.from("thread_reads").select("thread_id, last_read_at"),
+    // The user's own profile — only to decide whether the Admin menu item
+    // exists. RLS lets them read their own row; the panel itself re-verifies.
+    supabase.from("profiles").select("is_admin").maybeSingle(),
     // Counts only — head:true skips returning the rows themselves, since these
     // just drive the badges in the More menu.
     supabase
@@ -504,6 +508,7 @@ export default async function AppPage({
       )}
       <AppShell
         userEmail={userEmail}
+        isAdmin={Boolean((profileRow as { is_admin: boolean } | null)?.is_admin)}
         initialTab={activeTab}
         counts={counts}
         railByTab={railByTab}

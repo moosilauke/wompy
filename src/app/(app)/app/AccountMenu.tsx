@@ -33,10 +33,12 @@ export interface AccountMenuItem {
 
 export function AccountMenu({
   userEmail,
+  isAdmin,
   onSync,
   syncing,
 }: {
   userEmail: string | null;
+  isAdmin: boolean;
   onSync: () => void;
   syncing: boolean;
 }) {
@@ -77,7 +79,12 @@ export function AccountMenu({
     },
     { id: "profile", label: "Profile", comingSoon: true, startsGroup: true },
     { id: "settings", label: "Settings", comingSoon: true },
-    { id: "admin", label: "Admin", comingSoon: true },
+    // Admin appears ONLY for admins — a real link, not a "Soon" placeholder.
+    // A non-admin sees no trace of it, so the panel's existence isn't hinted
+    // at from here.
+    ...(isAdmin
+      ? [{ id: "admin", label: "Admin", href: "/admin" }]
+      : []),
   ];
 
   const label = userEmail ?? "Account";

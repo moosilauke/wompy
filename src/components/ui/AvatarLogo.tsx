@@ -9,10 +9,12 @@ import { useState } from "react";
  * fallback=404), so onError is the signal to drop back to our own colored
  * initials rather than show a placeholder we don't control.
  *
- * The logo sits on a white tile with a small inset padding, so a mark with its
- * own tight bounding box (Amazon, Schwab) has breathing room inside the circle
- * instead of clipping hard against the edge. `object-contain` keeps aspect
- * ratio within that padded box.
+ * The image fills the circle edge-to-edge (object-cover), so the circular mask
+ * on the parent is the only boundary. Brand icons come in two kinds — a
+ * transparent logomark and a full-bleed colored square tile — and letting the
+ * image fill means a square tile reads as a clean colored circle instead of a
+ * square poking its corners past the frame. A white backing shows through for
+ * transparent marks so they sit on white rather than the dark rail.
  */
 export function AvatarLogo({
   src,
@@ -26,7 +28,7 @@ export function AvatarLogo({
   if (failed) return <>{fallback}</>;
 
   return (
-    <span className="flex h-full w-full items-center justify-center bg-white p-[14%]">
+    <span className="block h-full w-full bg-white">
       {/* eslint-disable-next-line @next/next/no-img-element -- external CDN with
           a dynamic per-domain URL; next/image would need remotePatterns and
           gains nothing for a small CDN-cached logo. */}
@@ -35,7 +37,7 @@ export function AvatarLogo({
         alt=""
         loading="lazy"
         onError={() => setFailed(true)}
-        className="max-h-full max-w-full object-contain"
+        className="h-full w-full object-cover"
       />
     </span>
   );

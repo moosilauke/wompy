@@ -224,10 +224,7 @@ export default async function AppPage({
       label: c.display_name || fallbackLabel(c.address) || c.address,
     }));
 
-  const toRailThread = (
-    t: (typeof allThreads)[number],
-    openThreadId: string | null,
-  ): RailThread => {
+  const toRailThread = (t: (typeof allThreads)[number]): RailThread => {
     const participants = t.participant_set ?? [];
     const primary = participants[0] ?? "";
     return {
@@ -237,10 +234,13 @@ export default async function AppPage({
       extraParticipants: Math.max(0, participants.length - 1),
       snippet: snippetByThread.get(t.id) ?? "",
       lastMessageAt: t.last_message_at,
-      // The currently-open thread never shows as unread: it is being marked
-      // read as it renders, and a dot that vanishes a moment later reads as a
-      // glitch.
-      unread: unreadThreads.has(t.id) && t.id !== openThreadId,
+      // The real unread state, open thread included. The open thread is NOT
+      // suppressed: marking it unread while reading it is a deliberate "later"
+      // gesture whose whole point is that the dot stays. Opening an unread
+      // thread still clears the dot promptly — MarkThreadRead fires on arrival
+      // and refreshes — so the only case where it lingers is the one where the
+      // user asked for it to.
+      unread: unreadThreads.has(t.id),
     };
   };
 
@@ -262,13 +262,13 @@ export default async function AppPage({
   const railByTab: Record<ContactTab, RailThread[]> = {
     contact: allThreads
       .filter((t) => t.tab === "contact")
-      .map((t) => toRailThread(t, selected?.id ?? null)),
+      .map(toRailThread),
     company: allThreads
       .filter((t) => t.tab === "company")
-      .map((t) => toRailThread(t, selected?.id ?? null)),
+      .map(toRailThread),
     spam: allThreads
       .filter((t) => t.tab === "spam")
-      .map((t) => toRailThread(t, selected?.id ?? null)),
+      .map(toRailThread),
   };
 
   let paneThread: PaneThread | null = null;

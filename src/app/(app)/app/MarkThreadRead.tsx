@@ -4,16 +4,16 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * Marks the open conversation read.
+ * Marks the open conversation read — on open.
  *
- * Fires on open rather than after a dwell timer: immediate is what every mail
- * client does, and a delay mostly produces the confusing case where a thread you
- * looked at stays bold.
+ * The trigger is *navigating into* an unread thread, not the open thread merely
+ * being unread. That distinction is the whole behaviour: marking the thread
+ * you're currently reading as unread must leave it unread (a "deal with this
+ * later" gesture you make while still looking at it), so this fires only when
+ * the selected thread id CHANGES to an unread one.
  *
- * Read state is Wompy's own now — a per-thread watermark in Supabase, no Gmail
- * round-trip — so this is a single cheap write. It fires only when the thread is
- * actually unread, and only once per thread per session, so re-renders (the sync
- * poller's router.refresh every 2 minutes) don't re-request.
+ * Read state is Wompy's own — a per-thread watermark in Supabase, no Gmail
+ * round-trip — so the mark is a single cheap write.
  */
 export function MarkThreadRead({
   threadId,
@@ -23,12 +23,17 @@ export function MarkThreadRead({
   hasUnread: boolean;
 }) {
   const router = useRouter();
-  // Threads already handled this session, so re-renders don't re-request.
-  const handled = useRef<Set<string>>(new Set());
+  // The thread that was open on the previous render. Mark-read fires only when
+  // the open thread changes, so flipping the current thread's own unread state
+  // (marking it unread while open) never triggers a re-read.
+  const previousThreadId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!hasUnread || handled.current.has(threadId)) return;
-    handled.current.add(threadId);
+    const changedThread = previousThreadId.current !== threadId;
+    previousThreadId.current = threadId;
+
+    // Only on arriving at a different thread, and only if it's unread.
+    if (!changedThread || !hasUnread) return;
 
     let cancelled = false;
 
@@ -40,13 +45,11 @@ export function MarkThreadRead({
           body: JSON.stringify({ action: "read", threadId }),
         });
         if (cancelled || !res.ok) return;
-        // Refresh so the rail drops the unread treatment. hasUnread gated this,
-        // so there was a real change to reflect.
+        // Refresh so the rail drops the unread treatment.
         router.refresh();
       } catch {
         // A failed mark-read isn't worth interrupting reading over; reopening
         // the thread will try again.
-        handled.current.delete(threadId);
       }
     })();
 

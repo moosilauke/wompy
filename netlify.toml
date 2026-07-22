@@ -5,23 +5,29 @@
   publish = ".next"
 
 [build.environment]
-  # Secrets scanning false positive.
+  # Secrets-scanning omissions.
   #
-  # The build embeds no secret VALUES — every secret is read from process.env at
-  # runtime via lazy getters in src/lib/env.ts, never inlined. Verified: none of
-  # the actual values (GOCSPX-…, sb_secret_…, the token key) appear anywhere in
-  # .next, client OR server. What the scanner catches is the variable-NAME
-  # strings ("GOOGLE_CLIENT_ID", etc.), which appear only inside required()'s
-  # error messages, and which it flags as a hint the value might be nearby.
+  # Netlify scans the build for the VALUE of every env var set in its dashboard,
+  # including ones that aren't secret. Several of ours legitimately appear in the
+  # output — that's correct, not a leak — so their keys are omitted here. The two
+  # genuinely dangerous keys are deliberately left in, so a real leak still fails
+  # the build.
   #
-  # These three Google keys are omitted from scanning:
-  #   - GOOGLE_CLIENT_ID and GOOGLE_REDIRECT_URI aren't secret at all — the OAuth
-  #     client id and callback URL are public in every sign-in flow.
-  #   - GOOGLE_CLIENT_SECRET is sensitive, but its value provably isn't in the
-  #     build; only its harmless name-string is. Omitting the key clears the
-  #     false positive.
+  # Omitted — NEXT_PUBLIC_* are compiled into the client bundle BY DESIGN (that's
+  # what the prefix means) and none are secret:
+  #   - NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY — the
+  #     browser talks to Supabase directly under RLS; the publishable key is the
+  #     public (anon) key, meant to ship to the client.
+  #   - NEXT_PUBLIC_APP_URL — the site's own URL. It appears in env.ts and even
+  #     the README; it is about as un-secret as a value gets.
   #
-  # Deliberately NOT omitted, so a real leak still fails the build:
-  # SUPABASE_SECRET_KEY and TOKEN_ENCRYPTION_KEY — the two keys whose exposure
-  # would actually be dangerous. Scanning stays fully active for both.
-  SECRETS_SCAN_OMIT_KEYS = "GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI"
+  # Omitted — public OAuth identifiers, not secrets:
+  #   - GOOGLE_CLIENT_ID / GOOGLE_REDIRECT_URI — visible in every sign-in flow.
+  #   - GOOGLE_CLIENT_SECRET — this one IS sensitive, but its value provably
+  #     isn't in the build (only its name-string, from an error message). Omitting
+  #     the key clears that false positive.
+  #
+  # NOT omitted, so a real leak still fails the build:
+  #   SUPABASE_SECRET_KEY and TOKEN_ENCRYPTION_KEY — the two keys whose exposure
+  #   would actually be dangerous. Full scanning stays active for both.
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,NEXT_PUBLIC_APP_URL,GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI"

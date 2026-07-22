@@ -9,6 +9,11 @@ import {
   deriveSubject,
   replySubject,
 } from "@/lib/email/mime";
+import {
+  buildReactionMessage,
+  canReactTo,
+  isSingleEmoji,
+} from "@/lib/email/reactions";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -111,6 +116,122 @@ export async function sendReply(
       // conversation on the recipient's side.
       ...(parent?.gmail_thread_id
         ? { threadId: parent.gmail_thread_id }
+        : {}),
+    },
+  });
+
+  return {
+    gmailMessageId: sent.data.id ?? "",
+    gmailThreadId: sent.data.threadId ?? null,
+  };
+}
+
+/** Raised when a reaction can't be sent to this conversation's recipients. */
+export class ReactionUnsupportedError extends Error {
+  readonly code = "reaction_unsupported";
+  constructor(message: string) {
+    super(message);
+    this.name = "ReactionUnsupportedError";
+  }
+}
+
+/**
+ * React to a specific message with an emoji.
+ *
+ * Unlike a reply, this targets one message (not the thread's latest) and is
+ * gated on the recipients: a reaction sent somewhere it won't render arrives as
+ * a short email instead, so `canReactTo` is a hard precondition rather than a
+ * UI hint. The picker is only shown when it passes, but the server re-checks —
+ * a client should never be the thing enforcing this.
+ */
+export async function sendReaction(
+  account: EmailAccount,
+  messageId: string,
+  emoji: string,
+): Promise<SendResult> {
+  if (!isSingleEmoji(emoji)) {
+    // Gmail silently drops a malformed reaction and sends the fallback as a
+    // plain email, so reject before it can reach the wire.
+    throw new ReactionUnsupportedError("That isn’t a single emoji.");
+  }
+
+  const admin = createAdminClient();
+
+  // The exact message being reacted to — its Message-ID is the reaction's
+  // In-Reply-To, and its thread supplies the recipients.
+  const { data: target, error: targetError } = await admin
+    .from("messages")
+    .select(
+      "thread_id, gmail_thread_id, message_id_header, references_header, subject",
+    )
+    .eq("id", messageId)
+    .eq("user_id", account.user_id)
+    .maybeSingle();
+  if (targetError) throw targetError;
+  if (!target) throw new Error("Message not found.");
+
+  const targetRow = target as {
+    thread_id: string | null;
+    gmail_thread_id: string | null;
+    message_id_header: string | null;
+    references_header: string | null;
+    subject: string | null;
+  };
+  if (!targetRow.message_id_header) {
+    // Nothing to point In-Reply-To at; the reaction couldn't be attributed.
+    throw new ReactionUnsupportedError(
+      "This message can’t be reacted to yet.",
+    );
+  }
+
+  // Recipients come from the thread's participant set, same as a reply, so a
+  // group conversation keeps everyone included and the user isn't sent their
+  // own reaction.
+  const { data: thread, error: threadError } = await admin
+    .from("threads")
+    .select("participant_set")
+    .eq("id", targetRow.thread_id ?? "")
+    .maybeSingle();
+  if (threadError) throw threadError;
+
+  const participants =
+    (thread as { participant_set: string[] } | null)?.participant_set ?? [];
+  const selfCanonical = canonicalAddress(account.email);
+  const recipients = participants.filter(
+    (p) => canonicalAddress(p) !== selfCanonical,
+  );
+  if (recipients.length === 0) {
+    // Self-thread: react to your own message. Always deliverable.
+    recipients.push(account.email);
+  }
+
+  if (!canReactTo(recipients)) {
+    throw new ReactionUnsupportedError(
+      "Reactions only work when everyone in this conversation uses a client that supports them.",
+    );
+  }
+
+  const raw = buildReactionMessage({
+    from: account.email,
+    to: recipients,
+    inReplyTo: targetRow.message_id_header,
+    references: buildReferences(
+      targetRow.references_header,
+      targetRow.message_id_header,
+    ),
+    subject: replySubject(targetRow.subject),
+    emoji,
+  });
+
+  const auth = await getAuthorizedClient(account);
+  const gmail = google.gmail({ version: "v1", auth });
+
+  const sent = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw,
+      ...(targetRow.gmail_thread_id
+        ? { threadId: targetRow.gmail_thread_id }
         : {}),
     },
   });

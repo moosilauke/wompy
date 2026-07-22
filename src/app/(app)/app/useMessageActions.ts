@@ -98,7 +98,35 @@ export function useMessageActions() {
     [run, router, notify],
   );
 
-  return { trash, setRead, reclassify };
+  /**
+   * React to a message with an emoji.
+   *
+   * Optimism would be misplaced here: the send can be rejected server-side
+   * (a recipient whose client won't render it), so we wait for the result and
+   * only surface the reaction — via router.refresh, which re-fetches the badge —
+   * once it's actually gone out.
+   */
+  const react = useCallback(
+    async (messageId: string, emoji: string) => {
+      try {
+        const res = await fetch("/api/react", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messageId, emoji }),
+        });
+        const json = await res.json();
+        if (!res.ok) {
+          throw new Error(json?.detail ?? json?.error ?? "Couldn’t react");
+        }
+        router.refresh();
+      } catch (err) {
+        notify(err instanceof Error ? err.message : "Couldn’t react");
+      }
+    },
+    [router, notify],
+  );
+
+  return { trash, setRead, reclassify, react };
 }
 
 const TAB_LABELS: Record<ContactTab, string> = {

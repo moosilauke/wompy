@@ -45,6 +45,11 @@ Last updated: 2026-07-21
 - Account menu (top-right): sync, sign out, and placeholders for Profile /
   Settings / Admin. Sync errors and the reconnect prompt stay in the bar rather
   than behind a click
+- Emoji reactions, send and receive. Sent as real email carrying both Gmail's
+  and RFC 9078's reaction formats; the picker only appears when every recipient
+  is on a reaction-capable provider (Gmail / Microsoft), since there's no way to
+  detect support and the fallback is a plain-text reply. Badges overlap the
+  bubble's bottom-left corner.
 - Landing page that IS the app shell, statically rendered
 - Unified sign-in/sign-up in a modal
 
@@ -105,7 +110,6 @@ urgent, but cheaper to build before there are many rows.
 - **Contact and contacts' messages multi-select** — ability, via keyboard (ctrl and shift-click) and GUI to select multiple contact conversations and/or select multiple messages/emails from a contact
 - **Create groups** — net new messages only allow selecting one recipient currently vs multiple
 - **Add forwarding** — ability to forward a message to another contact(s)
-- **Emoji reactions** — for clients that also support it, add emoji reactions on messages
 - **Special handling of some attachment types** — e.g. for images, preview in modal overlay vs ONLY download (maybe even display thumbnail too?); for calendar invites, option to open in the same calendar as the email provider (e.g. if syncing Gmail, then ICS opens Google Calendar to add calendar invite automatically)
 - **Add icons** — icons will help add visual interest and clue users in more quickly to various functions of a given button/menu
 - **Display full/rich HTML emails** — appears we're converting HTML to text vs selectively rendering some or all of the HTML

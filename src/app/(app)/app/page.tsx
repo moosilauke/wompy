@@ -8,6 +8,7 @@ import {
 } from "@/lib/email/addresses";
 import { htmlToText, normalizeSnippet } from "@/lib/email/text";
 import { buildExcerpt } from "@/lib/email/excerpt";
+import { canReactTo } from "@/lib/email/reactions";
 import { AppShell } from "./AppShell";
 import { type RailThread } from "./ContactRail";
 import {
@@ -260,6 +261,12 @@ export default async function AppPage({
       label: labelFor(primary),
       primaryAddress: primary,
       participants,
+      // Whether the add-reaction control is offered. `participants` already
+      // excludes the user (participant-set threading), so this is exactly the
+      // set a reaction would be sent to. A self-thread (no other participants)
+      // is always reactable.
+      canReact:
+        participants.length === 0 || canReactTo(participants),
     };
 
     const { data: messageRows } = await supabase

@@ -2,6 +2,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Bubble, BubbleRow, DayDivider } from "@/components/ui/Bubble";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
+import { ReactionPicker } from "./ReactionPicker";
 import { ScrollToLatest } from "./ScrollToLatest";
 import {
   AttachmentList,
@@ -35,6 +36,8 @@ export interface PaneThread {
   label: string;
   primaryAddress: string;
   participants: string[];
+  /** Whether the add-reaction control is offered for this conversation. */
+  canReact: boolean;
 }
 
 /**
@@ -117,9 +120,9 @@ export function ReadingPane({
                 // edge isn't clipped by the next row.
                 className={msg.reactions.length > 0 ? "mb-3" : undefined}
               >
-                {/* Positioning context for the reaction badge, which hangs off
-                    the bubble's bottom-left corner. */}
-                <div className="relative">
+                {/* Positioning context for the reaction badge and picker, plus
+                    `group` so the picker button appears on hover. */}
+                <div className="group relative">
                   <Bubble outgoing={msg.outgoing}>
                     <MessageBody
                       messageId={msg.id}
@@ -153,6 +156,15 @@ export function ReadingPane({
                     <div className="absolute -bottom-2.5 left-2 z-10">
                       <ReactionBadges reactions={msg.reactions} />
                     </div>
+                  )}
+
+                  {/* Only when the conversation's recipients can render
+                      reactions — otherwise sending would produce a plain email. */}
+                  {thread.canReact && (
+                    <ReactionPicker
+                      messageId={msg.id}
+                      outgoing={msg.outgoing}
+                    />
                   )}
                 </div>
               </BubbleRow>

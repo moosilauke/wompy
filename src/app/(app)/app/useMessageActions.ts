@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useToasts } from "./Toasts";
+import { useOptimisticReactions } from "./OptimisticReactions";
 import type { ContactTab } from "@/lib/types";
 
 /**
@@ -14,6 +15,7 @@ import type { ContactTab } from "@/lib/types";
 export function useMessageActions() {
   const router = useRouter();
   const { notify } = useToasts();
+  const { addPending, clearPending } = useOptimisticReactions();
 
   const run = useCallback(
     async (body: Record<string, unknown>) => {
@@ -101,13 +103,14 @@ export function useMessageActions() {
   /**
    * React to a message with an emoji.
    *
-   * Optimism would be misplaced here: the send can be rejected server-side
-   * (a recipient whose client won't render it), so we wait for the result and
-   * only surface the reaction — via router.refresh, which re-fetches the badge —
-   * once it's actually gone out.
+   * The badge is shown immediately via the optimistic layer, then reconciled
+   * against the server's refreshed data. On failure the optimistic badge is
+   * pulled back and the error surfaced, so a rejected reaction (e.g. a recipient
+   * whose client won't render it) doesn't linger as if it succeeded.
    */
   const react = useCallback(
     async (messageId: string, emoji: string) => {
+      addPending(messageId, emoji);
       try {
         const res = await fetch("/api/react", {
           method: "POST",
@@ -118,12 +121,15 @@ export function useMessageActions() {
         if (!res.ok) {
           throw new Error(json?.detail ?? json?.error ?? "Couldn’t react");
         }
+        // The server now has it; refresh so the real badge replaces the
+        // optimistic one. The pending entry is cleared once props reflect it.
         router.refresh();
       } catch (err) {
+        clearPending(messageId, emoji);
         notify(err instanceof Error ? err.message : "Couldn’t react");
       }
     },
-    [router, notify],
+    [router, notify, addPending, clearPending],
   );
 
   return { trash, setRead, reclassify, react };

@@ -8,10 +8,8 @@ import {
   AttachmentList,
   type AttachmentInfo,
 } from "@/components/ui/AttachmentChip";
-import {
-  ReactionBadges,
-  type ReactionSummary,
-} from "@/components/ui/ReactionBadges";
+import { type ReactionSummary } from "@/components/ui/ReactionBadges";
+import { MessageReactions } from "./MessageReactions";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
@@ -152,11 +150,15 @@ export function ReadingPane({
                       bubble — a reaction is a response TO the message, and the
                       overlap reads as "attached to this one" rather than as a
                       separate element. */}
-                  {msg.reactions.length > 0 && (
-                    <div className="absolute -bottom-2.5 left-2 z-10">
-                      <ReactionBadges reactions={msg.reactions} />
-                    </div>
-                  )}
+                  {/* Always mounted: a reaction the user adds optimistically
+                      may appear on a message that had none from the server. The
+                      component renders nothing when there's nothing to show. */}
+                  <div className="absolute -bottom-4 left-2 z-10">
+                    <MessageReactions
+                      messageId={msg.id}
+                      reactions={msg.reactions}
+                    />
+                  </div>
 
                   {/* Only when the conversation's recipients can render
                       reactions — otherwise sending would produce a plain email. */}

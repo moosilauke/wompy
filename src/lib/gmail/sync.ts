@@ -240,15 +240,36 @@ export async function ingestMessageById(
     })
   ).data;
 
+  const row = mapMessageToRow(account, full);
+
+  // A reaction ingested here (e.g. our own, right after sending) must be
+  // recognised and flagged, exactly as the full sync does — otherwise the
+  // carrier renders as a plain message until the next poll reclassifies it.
+  const emoji = full.payload ? extractReaction(full.payload) : null;
+  if (emoji) row.is_reaction = true;
+
   const { data: stored, error } = await admin
     .from("messages")
-    .upsert([mapMessageToRow(account, full)], {
+    .upsert([row], {
       onConflict: "email_account_id,gmail_message_id",
     })
     .select(
       "id, gmail_message_id, from_address, to_addresses, cc_addresses, internal_date",
     );
   if (error) throw error;
+
+  if (emoji) {
+    await storeReactions(account.user_id, [
+      {
+        gmailMessageId,
+        targetMessageIdHeader: row.in_reply_to,
+        fromAddress: row.from_address ?? "",
+        emoji,
+        reactedAt: row.internal_date,
+      },
+    ]);
+    await linkPendingReactions(account.user_id);
+  }
 
   const attachments = extractAttachments(full.payload ?? undefined);
   if (attachments.length > 0) {

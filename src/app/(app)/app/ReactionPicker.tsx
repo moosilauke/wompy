@@ -46,7 +46,7 @@ export function ReactionPicker({
               type="button"
               onClick={() => choose(emoji)}
               aria-label={`React with ${emoji}`}
-              className="rounded-full px-1 py-0.5 text-[16px] leading-none transition-transform hover:scale-125"
+              className="rounded-full p-0.5 text-[18px] leading-none transition-transform hover:scale-125"
             >
               {emoji}
             </button>
@@ -59,7 +59,7 @@ export function ReactionPicker({
           aria-label="Add reaction"
           // Hidden until the row is hovered (group-hover on the bubble wrapper),
           // so the chat stays uncluttered.
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[14px] text-text-muted opacity-0 shadow-[0_2px_8px_rgba(0,0,0,0.12)] transition-opacity group-hover:opacity-100 hover:text-text-body"
+          className="flex h-6 w-6 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[15px] leading-none text-text-muted opacity-0 shadow-[0_2px_8px_rgba(0,0,0,0.12)] transition-opacity group-hover:opacity-100 hover:text-text-body"
         >
           ☺
         </button>

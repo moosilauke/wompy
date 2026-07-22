@@ -19,6 +19,7 @@ import {
 import { CompanyPane, type CompanyMessage } from "./CompanyPane";
 import { MessageListPane, type ListedMessage } from "./MessageListPane";
 import { ToastProvider } from "./Toasts";
+import { OptimisticReactionsProvider } from "./OptimisticReactions";
 import { MarkThreadRead } from "./MarkThreadRead";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
@@ -472,6 +473,7 @@ export default async function AppPage({
 
   return (
     <ToastProvider>
+      <OptimisticReactionsProvider>
       {/* Renders nothing; fires the mark-read request for the open thread. */}
       {selected && (
         <MarkThreadRead
@@ -502,6 +504,7 @@ export default async function AppPage({
           />
         )}
       </AppShell>
+      </OptimisticReactionsProvider>
     </ToastProvider>
   );
 }

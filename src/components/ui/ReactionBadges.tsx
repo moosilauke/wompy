@@ -29,7 +29,7 @@ export function ReactionBadges({
         <span
           key={r.emoji}
           title={`${r.people.join(", ")} reacted with ${r.emoji}`}
-          className="inline-flex items-center gap-1 rounded-full border border-black/[0.07] bg-white px-2 py-[3px] text-[12px] shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+          className="inline-flex items-center gap-0.5 rounded-full border border-black/[0.07] bg-white px-1.5 py-0.5 text-[13px] leading-none shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
         >
           <span aria-hidden>{r.emoji}</span>
           {r.count > 1 && (

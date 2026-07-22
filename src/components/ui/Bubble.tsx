@@ -61,7 +61,13 @@ export function BubbleRow({
     >
       {children}
       {timestamp && (
-        <span className="px-1 text-[11.5px] text-text-muted-3">{timestamp}</span>
+        // Always right-aligned under the bubble. On incoming messages the row
+        // itself is left-aligned, but a left-hanging reaction badge would
+        // otherwise collide with a left-aligned timestamp, so `self-end` keeps
+        // the timestamp clear of it on both sides.
+        <span className="self-end px-1 text-[11.5px] text-text-muted-3">
+          {timestamp}
+        </span>
       )}
     </div>
   );

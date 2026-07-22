@@ -18,9 +18,9 @@ export interface RailThread {
   lastMessageAt: string | null;
   /**
    * Drives the unread treatment (bold name, brighter snippet, coral dot).
-   * True when any message in the thread still carries Gmail's UNREAD label,
-   * except for the conversation currently open — that one is being marked read
-   * as it renders.
+   * True when the thread's newest message is newer than the user's Wompy read
+   * watermark for it, except for the conversation currently open — that one is
+   * being marked read as it renders.
    */
   unread: boolean;
 }

@@ -82,6 +82,7 @@ export default async function AppPage({
     { data: recentRows },
     { data: threadRows },
     { data: contactRows },
+    { data: readRows },
     { count: sentCount },
     { count: trashCount },
   ] = await Promise.all([
@@ -96,7 +97,7 @@ export default async function AppPage({
     // `snippet` alone covers that, and Gmail populates it for every message.
     supabase
       .from("messages")
-      .select("thread_id, snippet, internal_date, label_ids")
+      .select("thread_id, snippet, internal_date")
       .not("thread_id", "is", null)
       .is("trashed_at", null)
       // Reaction carriers aren't messages: previewing one would make the rail
@@ -112,6 +113,10 @@ export default async function AppPage({
       .order("last_message_at", { ascending: false, nullsFirst: false }),
     // Display names for participants, gathered during threading.
     supabase.from("contacts").select("address, display_name, tab"),
+    // Per-thread read watermarks. Unread is derived by comparing these to each
+    // thread's last_message_at — no Gmail round-trip, and it follows the user
+    // across devices.
+    supabase.from("thread_reads").select("thread_id, last_read_at"),
     // Counts only — head:true skips returning the rows themselves, since these
     // just drive the badges in the More menu.
     supabase
@@ -134,22 +139,38 @@ export default async function AppPage({
   );
 
   const snippetByThread = new Map<string, string>();
-  // A thread is unread when any message in it still carries Gmail's UNREAD
-  // label — the same arrangement as TRASH, so there is no local read state to
-  // drift out of sync with Gmail.
-  const unreadThreads = new Set<string>();
   for (const row of (recentRows ?? []) as {
     thread_id: string;
     snippet: string | null;
-    label_ids: string[] | null;
   }[]) {
     if (!snippetByThread.has(row.thread_id)) {
       // Decoded here as well as at ingest, so rows synced before the fix (and
       // any provider that escapes differently) still render clean text.
       snippetByThread.set(row.thread_id, normalizeSnippet(row.snippet) ?? "");
     }
-    if ((row.label_ids ?? []).includes("UNREAD")) {
-      unreadThreads.add(row.thread_id);
+  }
+
+  // Wompy-native read state: a thread is unread when its newest message is
+  // newer than the user's read watermark for it. No watermark row means read —
+  // the cutover seeded every existing thread, so an unseeded thread is one
+  // created after the switch by incoming mail, which the comparison below still
+  // catches because its last_message_at beats the absent (epoch) watermark.
+  const readWatermark = new Map<string, number>();
+  for (const row of (readRows ?? []) as {
+    thread_id: string;
+    last_read_at: string;
+  }[]) {
+    readWatermark.set(row.thread_id, new Date(row.last_read_at).getTime());
+  }
+  const unreadThreads = new Set<string>();
+  for (const t of (threadRows ?? []) as {
+    id: string;
+    last_message_at: string | null;
+  }[]) {
+    if (!t.last_message_at) continue;
+    const seenUpTo = readWatermark.get(t.id) ?? 0;
+    if (new Date(t.last_message_at).getTime() > seenUpTo) {
+      unreadThreads.add(t.id);
     }
   }
 

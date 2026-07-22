@@ -153,7 +153,7 @@ export function ReadingPane({
                   {/* Always mounted: a reaction the user adds optimistically
                       may appear on a message that had none from the server. The
                       component renders nothing when there's nothing to show. */}
-                  <div className="absolute -bottom-4 left-2 z-10">
+                  <div className="absolute -bottom-3 left-2.5 z-10">
                     <MessageReactions
                       messageId={msg.id}
                       reactions={msg.reactions}

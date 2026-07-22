@@ -10,10 +10,10 @@ import { useRouter } from "next/navigation";
  * client does, and a delay mostly produces the confusing case where a thread you
  * looked at stays bold.
  *
- * The request is a no-op server-side when nothing in the thread is unread, so
- * re-rendering (the sync poller calls router.refresh every 2 minutes) costs
- * nothing. `router.refresh()` runs only when something actually changed, so the
- * poller and this can't drive each other in a loop.
+ * Read state is Wompy's own now — a per-thread watermark in Supabase, no Gmail
+ * round-trip — so this is a single cheap write. It fires only when the thread is
+ * actually unread, and only once per thread per session, so re-renders (the sync
+ * poller's router.refresh every 2 minutes) don't re-request.
  */
 export function MarkThreadRead({
   threadId,
@@ -40,14 +40,12 @@ export function MarkThreadRead({
           body: JSON.stringify({ action: "read", threadId }),
         });
         if (cancelled || !res.ok) return;
-
-        const data = await res.json();
-        // Only refresh when messages actually changed, so an already-read
-        // thread doesn't trigger a pointless re-render.
-        if ((data.messageIds?.length ?? 0) > 0) router.refresh();
+        // Refresh so the rail drops the unread treatment. hasUnread gated this,
+        // so there was a real change to reflect.
+        router.refresh();
       } catch {
-        // A failed mark-read is not worth interrupting reading over; the next
-        // sync will reconcile with Gmail either way.
+        // A failed mark-read isn't worth interrupting reading over; reopening
+        // the thread will try again.
         handled.current.delete(threadId);
       }
     })();

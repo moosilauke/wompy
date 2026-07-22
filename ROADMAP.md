@@ -27,7 +27,9 @@ Last updated: 2026-07-21
 - More ▾ menu: Sent, Trash, Spam
 - Reply and net-new compose (365-char constraint, full-email escape hatch)
 - Delete → Gmail Trash, with undo; right-click menus at thread and message level
-- Read/unread, mirrored to Gmail's UNREAD label
+- Read/unread — Wompy-native, a per-thread read watermark in Supabase. No Gmail
+  round-trip on mark-read; state follows the user across devices and is
+  independent of Gmail's own read state
 - Message excerpting: quoted history + signature stripped, full text in a modal
 - HTML-only mail converted to readable text (41% of the corpus)
 - Search: people (trigram) + messages (Postgres FTS over excerpted bodies)

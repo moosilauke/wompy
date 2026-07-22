@@ -24,6 +24,12 @@ export function AdminUserTable({
 }) {
   const router = useRouter();
   const [openMenu, setOpenMenu] = useState<string | null>(null);
+  // Viewport coordinates of the open menu's trigger, so the menu can render
+  // `fixed` and not be clipped by the table's horizontal-scroll container.
+  const [menuAnchor, setMenuAnchor] = useState<{
+    top: number;
+    right: number;
+  } | null>(null);
   const [confirm, setConfirm] = useState<
     | { kind: "delete"; user: AdminUser }
     | { kind: "make-admin"; user: AdminUser }
@@ -101,21 +107,30 @@ export function AdminUserTable({
               <td className="px-4 py-3 text-text-muted">
                 {u.mailProvider ?? "—"}
               </td>
-              <td className="relative px-4 py-3 text-right">
+              <td className="px-4 py-3 text-right">
                 <button
                   type="button"
-                  onClick={() =>
-                    setOpenMenu(openMenu === u.id ? null : u.id)
-                  }
+                  onClick={(e) => {
+                    if (openMenu === u.id) {
+                      setOpenMenu(null);
+                      return;
+                    }
+                    // Anchor the menu to the trigger's viewport position so it
+                    // can render `fixed`, escaping the table's overflow clip.
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setMenuAnchor({ top: r.bottom + 4, right: window.innerWidth - r.right });
+                    setOpenMenu(u.id);
+                  }}
                   aria-label="Actions"
                   className="rounded-md px-2 py-1 text-[16px] leading-none text-text-muted hover:bg-black/[0.04]"
                 >
                   ⋯
                 </button>
 
-                {openMenu === u.id && (
+                {openMenu === u.id && menuAnchor && (
                   <RowMenu
                     user={u}
+                    anchor={menuAnchor}
                     onClose={() => setOpenMenu(null)}
                     onDelete={() => {
                       setOpenMenu(null);
@@ -180,12 +195,14 @@ export function AdminUserTable({
 
 function RowMenu({
   user,
+  anchor,
   onClose,
   onDelete,
   onToggleAdmin,
   onReset,
 }: {
   user: AdminUser;
+  anchor: { top: number; right: number };
   onClose: () => void;
   onDelete: () => void;
   onToggleAdmin: () => void;
@@ -198,7 +215,10 @@ function RowMenu({
     <div
       ref={ref}
       role="menu"
-      className="absolute right-4 top-full z-20 mt-1 min-w-[170px] overflow-hidden rounded-[10px] border border-black/[0.06] bg-white py-1 text-left shadow-[0_8px_28px_rgba(0,0,0,0.18)]"
+      // `fixed` so the table's overflow container can't clip it; positioned at
+      // the trigger's viewport coordinates captured on open.
+      style={{ top: anchor.top, right: anchor.right }}
+      className="fixed z-50 min-w-[170px] overflow-hidden rounded-[10px] border border-black/[0.06] bg-white py-1 text-left shadow-[0_8px_28px_rgba(0,0,0,0.18)]"
     >
       <button
         type="button"
@@ -357,7 +377,13 @@ function useOutsideClose(
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
+    // A fixed-positioned menu is anchored to a point captured on open, so
+    // scrolling would leave it stranded; close it instead.
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onClose, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onClose, true);
+    };
   }, [ref, onClose]);
 }

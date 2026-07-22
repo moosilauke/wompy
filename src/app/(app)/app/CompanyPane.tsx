@@ -23,6 +23,7 @@ export interface CompanyThread {
   label: string;
   primaryAddress: string;
   participants: string[];
+  logoUrl: string | null;
 }
 
 /**
@@ -62,6 +63,7 @@ export function CompanyPane({
           address={thread.primaryAddress}
           label={thread.label}
           size={44}
+          logoUrl={thread.logoUrl}
         />
         <div className="flex min-w-0 flex-col gap-0.5">
           <h2 className="truncate font-display text-[17px] font-bold text-text-body">

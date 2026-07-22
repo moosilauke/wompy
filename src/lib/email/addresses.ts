@@ -236,22 +236,30 @@ export function fallbackLabel(address: string): string {
  * existing fallback rather than showing something wrong.
  */
 function organizationNameFromDomain(domain: string): string | null {
-  const labels = domain.split(".").filter(Boolean);
+  const registrable = registrableDomain(domain);
+  if (!registrable) return null;
+  // The brand label is everything before the suffix's final dot.
+  const name = registrable.split(".")[0];
+  if (!name || name.length < 2) return null;
+  return prettifyDomainLabel(name);
+}
+
+/**
+ * The registrable domain for a host: `email.schwab.com` → `schwab.com`,
+ * `mail.notifications.acme.co.uk` → `acme.co.uk`. Strips sending subdomains so
+ * a brand resolves regardless of the ESP infrastructure in front of it.
+ *
+ * Returns null when nothing sensible remains (bare host, single label).
+ */
+export function registrableDomain(domain: string): string | null {
+  const labels = domain.toLowerCase().split(".").filter(Boolean);
   if (labels.length < 2) return null;
 
-  // Drop the public suffix. Two labels are removed for known multi-part
-  // suffixes (.co.uk, .com.au), one otherwise.
   const lastTwo = labels.slice(-2).join(".");
-  const stripped = MULTI_PART_SUFFIXES.has(lastTwo)
-    ? labels.slice(0, -2)
-    : labels.slice(0, -1);
-
-  // The registrable label is the last one remaining; anything before it is a
-  // sending subdomain (email., mail., notifications.).
-  const name = stripped[stripped.length - 1];
-  if (!name || name.length < 2) return null;
-
-  return prettifyDomainLabel(name);
+  // Known multi-part suffix (.co.uk): keep the last three labels; else last two.
+  const keep = MULTI_PART_SUFFIXES.has(lastTwo) ? 3 : 2;
+  if (labels.length < keep) return null;
+  return labels.slice(-keep).join(".");
 }
 
 /**

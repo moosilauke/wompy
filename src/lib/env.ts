@@ -22,6 +22,10 @@ export const NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 export const NEXT_PUBLIC_APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+// Brandfetch Logo Link client id. Public by design (embedded in the logo image
+// URL). When absent, company logos are simply skipped and avatars show initials.
+export const NEXT_PUBLIC_BRANDFETCH_CLIENT_ID =
+  process.env.NEXT_PUBLIC_BRANDFETCH_CLIENT_ID ?? "";
 
 /** True once the Supabase public env vars are present. Lets the app boot (and
  * show a "configure me" message) before credentials are filled in, instead of

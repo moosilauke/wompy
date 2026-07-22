@@ -23,6 +23,8 @@ export interface RailThread {
    * being marked read as it renders.
    */
   unread: boolean;
+  /** Company logo URL when the sender is a confident brand; else null. */
+  logoUrl: string | null;
 }
 
 /**
@@ -84,6 +86,7 @@ export function ContactRail({
                       unread={thread.unread}
                       active={active}
                       extraParticipants={thread.extraParticipants}
+                      logoUrl={thread.logoUrl}
                     />
                   </Link>
                   </ThreadRowMenu>

@@ -16,6 +16,7 @@ export function RailRow({
   unread = false,
   active = false,
   extraParticipants = 0,
+  logoUrl = null,
 }: {
   address: string;
   label: string;
@@ -25,6 +26,7 @@ export function RailRow({
   active?: boolean;
   /** "+2" suffix for group conversations. */
   extraParticipants?: number;
+  logoUrl?: string | null;
 }) {
   return (
     <span
@@ -34,7 +36,7 @@ export function RailRow({
           : "hover:bg-white/[0.06]"
       }`}
     >
-      <Avatar address={address} label={label} size={44} />
+      <Avatar address={address} label={label} size={44} logoUrl={logoUrl} />
 
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="flex items-baseline justify-between gap-2">

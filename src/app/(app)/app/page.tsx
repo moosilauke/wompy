@@ -9,6 +9,7 @@ import {
 import { htmlToText, normalizeSnippet } from "@/lib/email/text";
 import { buildExcerpt } from "@/lib/email/excerpt";
 import { canReactTo } from "@/lib/email/reactions";
+import { brandLogoUrl, logoDomainFor } from "@/lib/email/logos";
 import { AppShell } from "./AppShell";
 import { type RailThread } from "./ContactRail";
 import {
@@ -228,13 +229,25 @@ export default async function AppPage({
       label: c.display_name || fallbackLabel(c.address) || c.address,
     }));
 
-  const toRailThread = (t: (typeof allThreads)[number]): RailThread => {
+  // A Brandfetch logo, but only for Company senders on a confident brand
+  // domain — never people, never spam, never an ESP domain. Returns null
+  // everywhere else, and the Avatar falls back to initials.
+  const logoFor = (address: string, tab: ContactTab): string | null => {
+    if (tab !== "company") return null;
+    const domain = logoDomainFor(address);
+    return domain ? brandLogoUrl(domain) : null;
+  };
+
+  const toRailThread = (
+    t: (typeof allThreads)[number],
+  ): RailThread => {
     const participants = t.participant_set ?? [];
     const primary = participants[0] ?? "";
     return {
       id: t.id,
       primaryAddress: primary,
       label: labelFor(primary),
+      logoUrl: logoFor(primary, t.tab),
       extraParticipants: Math.max(0, participants.length - 1),
       snippet: snippetByThread.get(t.id) ?? "",
       lastMessageAt: t.last_message_at,
@@ -293,6 +306,7 @@ export default async function AppPage({
       // is always reactable.
       canReact:
         participants.length === 0 || canReactTo(participants),
+      logoUrl: logoFor(primary, selected.tab),
     };
 
     const { data: messageRows } = await supabase

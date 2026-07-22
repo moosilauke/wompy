@@ -44,6 +44,11 @@ Last updated: 2026-07-21
 - Organization names derived for functional addresses (`no-reply@sentinelone.com`
   → "SentinelOne"), only where the local part is generic and the domain isn't
   free-mail
+- Company logos via Brandfetch Logo Link, on the Companies tab only. Resolves
+  the registrable domain (email.schwab.com → schwab.com), skips ESP domains that
+  would show the wrong brand (feefo.com), never people or spam, and falls back
+  to colored initials when a logo is absent or fails. Needs
+  `NEXT_PUBLIC_BRANDFETCH_CLIENT_ID`; without it, logos are silently skipped.
 - Account menu (top-right): sync, sign out, and placeholders for Profile /
   Settings / Admin. Sync errors and the reconnect prompt stay in the bar rather
   than behind a click
@@ -98,22 +103,17 @@ urgent, but cheaper to build before there are many rows.
 - **Settings/profile page** — collect deferred preferences (see below) until
   there are enough to justify building it
   - Tab badge counts: totals vs unreads
-- **Sender logos** — investigated 2026-07-21, parked. Must be server-side and
-  cached: a client-side fetch would tell a third party which brands email the
-  user, the same tracking behaviour avoided by converting HTML mail to text.
-  46% of sending domains are ESP subdomains needing registrable-domain
-  extraction; `feefo.com` renders as "Charles Tyrwhitt", so a confident wrong
-  logo is a real risk.
 - **Static pages** — documentation, privacy policy, about, Wompy vs Alternatives (competitive page), contact/help
 - **Payment/subscriptions** — will use Creem
 - **Profile page** — includes email provider config/reconfig, personal settings, avatar upload, etc
 - **Stats page** — unlike Gmail etc, we'll gamify things slightly by displaying some fun stats/metrics/analytics; leans into our brand ethos of being more than just a Gmail clone
 - **Admin panel** — user list with actions is done (see Shipped). Still to add:
   subscription status (needs the payments work first)
-- **Transactional emails** — welcome, account confirmation, password reset. Using Resend on another project and will likely use here too.
+- **Transactional emails** — welcome, account confirmation, password reset. Will use Mailtrap for this.
 - **Continue performance enhancements** — delete is fixed (batched); next
   candidates are per-thread message fetch and the full-mailbox reclassify that
   runs on every sync
+
 - **Rate limits / API failure handling** — nothing currently handles Gmail 429s
   or a failed token refresh beyond the reauth case. Invisible with one user,
   routine with fifty.

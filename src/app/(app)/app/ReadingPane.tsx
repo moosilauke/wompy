@@ -36,6 +36,8 @@ export interface PaneThread {
   participants: string[];
   /** Whether the add-reaction control is offered for this conversation. */
   canReact: boolean;
+  /** Company logo URL for the header avatar; null for people. */
+  logoUrl: string | null;
 }
 
 /**

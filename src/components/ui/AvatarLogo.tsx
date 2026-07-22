@@ -7,11 +7,12 @@ import { useState } from "react";
  *
  * Brandfetch's Logo Link returns a 404 for an unknown brand (we ask for
  * fallback=404), so onError is the signal to drop back to our own colored
- * initials rather than show a placeholder we don't control. On a white logo
- * tile the initials sit on a tinted background exactly as they would without a
- * logo, so the fallback is seamless.
+ * initials rather than show a placeholder we don't control.
  *
- * The logo sits on white, since brand logos assume a light background.
+ * The logo sits on a white tile with a small inset padding, so a mark with its
+ * own tight bounding box (Amazon, Schwab) has breathing room inside the circle
+ * instead of clipping hard against the edge. `object-contain` keeps aspect
+ * ratio within that padded box.
  */
 export function AvatarLogo({
   src,
@@ -25,19 +26,17 @@ export function AvatarLogo({
   if (failed) return <>{fallback}</>;
 
   return (
-    <>
+    <span className="flex h-full w-full items-center justify-center bg-white p-[14%]">
       {/* eslint-disable-next-line @next/next/no-img-element -- external CDN with
           a dynamic per-domain URL; next/image would need remotePatterns and
-          gains nothing for a 64px CDN-cached logo. */}
+          gains nothing for a small CDN-cached logo. */}
       <img
         src={src}
         alt=""
-        width="100%"
-        height="100%"
         loading="lazy"
         onError={() => setFailed(true)}
-        className="h-full w-full bg-white object-contain"
+        className="max-h-full max-w-full object-contain"
       />
-    </>
+    </span>
   );
 }

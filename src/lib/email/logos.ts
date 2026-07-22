@@ -72,10 +72,16 @@ export function logoDomainFor(address: string): string | null {
  * The Brandfetch Logo Link for a domain, or null when no client id is
  * configured (so the app degrades cleanly to initials).
  *
- * `type=logo` prefers a full logo; `fallback=404` makes Brandfetch return a
- * real 404 for an unknown brand instead of a generic lettermark, so the <img>
- * can onError back to our own colored-initials avatar rather than showing a
- * Brandfetch placeholder we don't control.
+ * `type=icon` (the square brand icon) rather than `type=logo` (a wide
+ * wordmark): an icon is designed to fill a tile, so it sits cleanly in a
+ * circular avatar, where a wordmark would be letterboxed or cropped hard.
+ *
+ * Requested at 128px though it renders at ~44px, so it stays crisp on 2x/3x
+ * retina displays instead of being upscaled and blurry.
+ *
+ * `fallback=404` makes Brandfetch return a real 404 for an unknown brand instead
+ * of a generic lettermark, so the <img> can onError back to our own
+ * colored-initials avatar rather than a Brandfetch placeholder we don't control.
  */
 export function brandLogoUrl(domain: string): string | null {
   const clientId = process.env.NEXT_PUBLIC_BRANDFETCH_CLIENT_ID;
@@ -83,8 +89,8 @@ export function brandLogoUrl(domain: string): string | null {
 
   const params = new URLSearchParams({
     c: clientId,
-    type: "logo",
+    type: "icon",
     fallback: "404",
   });
-  return `https://cdn.brandfetch.io/${domain}/w/64/h/64?${params.toString()}`;
+  return `https://cdn.brandfetch.io/${domain}/w/128/h/128?${params.toString()}`;
 }

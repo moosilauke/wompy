@@ -1,5 +1,5 @@
 import "server-only";
-import { NEXT_PUBLIC_APP_URL } from "@/lib/env";
+import { PUBLIC_SITE_URL } from "@/lib/env";
 import { sendTransactionalEmail, type SendEmailResult } from "@/lib/email/mailer";
 
 /**
@@ -24,7 +24,7 @@ const MUTED = "#6b6558";
  * secure token, and isn't something Supabase sends. Never throws (see mailer).
  */
 export async function sendWelcomeEmail(to: string): Promise<SendEmailResult> {
-  const appUrl = NEXT_PUBLIC_APP_URL;
+  const appUrl = PUBLIC_SITE_URL;
 
   const text = [
     "Welcome to Wompy 👋",

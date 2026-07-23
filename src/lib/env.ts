@@ -22,6 +22,20 @@ export const NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY =
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "";
 export const NEXT_PUBLIC_APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+/**
+ * The app's public URL for use in EMAIL links.
+ *
+ * Unlike NEXT_PUBLIC_APP_URL (whose localhost default is correct for local dev —
+ * OAuth redirects, the dev server), an email link must never point at localhost:
+ * the recipient can't open it, and in production it would leak a broken link. So
+ * this falls back to the live domain, not localhost, when the env var is unset.
+ */
+export const PUBLIC_SITE_URL = (() => {
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  if (configured && !configured.includes("localhost")) return configured;
+  return "https://www.wompymail.com";
+})();
 // Brandfetch Logo Link client id. Public by design (embedded in the logo image
 // URL). When absent, company logos are simply skipped and avatars show initials.
 export const NEXT_PUBLIC_BRANDFETCH_CLIENT_ID =

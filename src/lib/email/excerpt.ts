@@ -45,6 +45,22 @@ const FORWARD_HEADER =
   /^\s*(-{2,}\s*(Original Message|Forwarded message)\s*-{2,}|_{5,}|From:\s.+)$/im;
 
 /**
+ * The line mail clients insert right above a forwarded message's header block —
+ * "Begin forwarded message:" (Apple Mail) or similar. Matched separately from
+ * FORWARD_HEADER because it sits *above* the From:/Date:/To:/Subject: block
+ * that FORWARD_HEADER cuts at, and a bare forward has nothing else.
+ */
+const FORWARD_OPENER = /^\s*(-{0,2}\s*begin forwarded message\s*:?\s*-{0,2})\s*$/im;
+
+/**
+ * The From:/Date:/To:/Subject: (/Reply-To:) header block a mail client inserts
+ * above forwarded content, so it can be stripped from the forwarded body itself
+ * rather than mistaken for prose.
+ */
+const FORWARDED_HEADER_BLOCK =
+  /^\s*From:\s.*\n(?:\s*(?:Date|To|Cc|Subject|Reply-To):.*\n?)*/im;
+
+/**
  * RFC 3676 signature delimiter: a line of exactly "--" (optionally with a
  * trailing space). Unambiguous when present.
  */
@@ -108,6 +124,7 @@ function stripQuotedHistory(body: string): { text: string; removed: boolean } {
   for (const pattern of [
     QUOTE_ATTRIBUTION,
     FORWARD_HEADER,
+    FORWARD_OPENER,
     QUOTE_ATTRIBUTION_PARTIAL,
   ]) {
     const match = pattern.exec(body);
@@ -243,6 +260,39 @@ function capLength(text: string, limit: number): { text: string; capped: boolean
 }
 
 /**
+ * Recover the forwarded content of a bare forward: no comment of the sender's
+ * own, just a forward opener/header and someone else's message. Returns the
+ * forwarded body with ITS header block (From:/Date:/To:/Subject:) and any
+ * quote markers stripped, or null if the body doesn't look like a bare forward
+ * at all (so the caller falls back to showing the untrimmed original).
+ *
+ * Deliberately narrow: only engages when stripQuotedHistory left nothing,
+ * meaning the sender added no text of their own. A forward WITH a comment
+ * ("thought you'd like this — " + forwarded mail) already keeps that comment
+ * as `trimmed`, so this never overrides real content.
+ */
+function recoverForwardedContent(source: string): string | null {
+  const opener = FORWARD_OPENER.exec(source) ?? FORWARD_HEADER.exec(source);
+  if (!opener) return null;
+
+  let body = source.slice(opener.index + opener[0].length);
+  // Quote markers (blockquote-derived `>` prefixes) sometimes wrap the entire
+  // forwarded block; strip them so the recovered text doesn't read as a quote.
+  body = body
+    .split("\n")
+    .map((line) => line.replace(/^\s*>+\s?/, ""))
+    .join("\n");
+
+  // The forwarded message's own From:/Date:/To:/Subject: block is the mail
+  // client's bookkeeping, not prose — drop it the same way FORWARD_HEADER
+  // would if it re-appeared inside a nested forward.
+  body = body.replace(FORWARDED_HEADER_BLOCK, "");
+
+  const tidied = tidy(body);
+  return tidied.length > 0 ? tidied : null;
+}
+
+/**
  * Reduce a raw body to what should appear in a bubble.
  *
  * Order matters: quoted history is removed before the signature, because a
@@ -268,10 +318,16 @@ export function buildExcerpt(
   const designed = stripSignature(dequoted.text);
   const trimmed = tidy(designed.text);
 
-  // If trimming left nothing, the message was only a signature or only a quote.
-  // Fall back to the tidied original rather than showing an empty bubble.
-  const meaningful = trimmed.length > 0 ? trimmed : tidy(source);
-  const usedFallback = trimmed.length === 0;
+  // If trimming left nothing, either the message was only a signature/quote
+  // chain on top of a real reply (fall back to the untrimmed original — under-
+  // trimming beats hiding what someone wrote), or it's a *bare forward*: no
+  // comment of the sender's own, just "Begin forwarded message:" and someone
+  // else's content. There the forwarded content is the whole point of the
+  // email, so recover and excerpt THAT rather than showing a near-empty bubble
+  // or the sender's throwaway header lines.
+  const forwarded = trimmed.length === 0 ? recoverForwardedContent(source) : null;
+  const meaningful = trimmed.length > 0 ? trimmed : (forwarded ?? tidy(source));
+  const usedFallback = trimmed.length === 0 && forwarded === null;
 
   const { text, capped } = capLength(meaningful, limit);
 

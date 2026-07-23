@@ -93,11 +93,14 @@ export const PLANS = [
   { label: "Family — $12/mo", popular: false },
 ] as const;
 
-/** Utility links in the rail's collapsible "More" section. */
-export const MORE_LINKS = [
-  "About us",
-  "Documentation",
-  "Privacy policy",
-  "FAQs",
-  "Get help",
-] as const;
+/**
+ * Utility links in the rail's collapsible "More" section. Most render inert
+ * (no page yet); only ones with an `href` are live, so nothing 404s.
+ */
+export const MORE_LINKS: { label: string; href?: string }[] = [
+  { label: "About us" },
+  { label: "Documentation" },
+  { label: "Privacy policy", href: "/privacy" },
+  { label: "FAQs" },
+  { label: "Get help" },
+];

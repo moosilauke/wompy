@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { MORE_LINKS } from "./content";
 
 /**
@@ -8,8 +9,9 @@ import { MORE_LINKS } from "./content";
  * [open]. On a landing page a disclosure widget is not worth a hydration
  * boundary.
  *
- * Links are inert for now: About us, Documentation, and the rest don't exist
+ * Most links are inert: About us, Documentation, and the rest don't have pages
  * yet, and pointing them at 404s would be worse than pointing them nowhere.
+ * Only ones with an `href` in MORE_LINKS are real.
  */
 export function MoreLinks() {
   return (
@@ -26,10 +28,19 @@ export function MoreLinks() {
 
       <ul className="flex flex-col pb-1 pt-0.5">
         {MORE_LINKS.map((link) => (
-          <li key={link}>
-            <span className="block cursor-default px-3 py-1.5 text-[12.5px] font-semibold text-on-spruce-muted">
-              {link}
-            </span>
+          <li key={link.label}>
+            {link.href ? (
+              <Link
+                href={link.href}
+                className="block px-3 py-1.5 text-[12.5px] font-semibold text-on-spruce-muted transition-colors hover:text-white"
+              >
+                {link.label}
+              </Link>
+            ) : (
+              <span className="block cursor-default px-3 py-1.5 text-[12.5px] font-semibold text-on-spruce-muted">
+                {link.label}
+              </span>
+            )}
           </li>
         ))}
       </ul>

@@ -28,6 +28,17 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // Safety net for the OAuth code exchange. The Google flow should land on
+  // /auth/callback, but if Supabase's Site URL drops the `?code=` on the site
+  // root instead (a common misconfiguration), the code never gets exchanged and
+  // the user is stuck signed-out. Forward it to the callback, code intact, so
+  // the session is established regardless.
+  if (pathname === "/" && request.nextUrl.searchParams.has("code")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
   // The landing page is public and statically rendered. An ANONYMOUS visitor —
   // no Supabase auth cookie — skips the session work entirely, keeping first
   // paint off the auth path on the page where a slow response costs the most.

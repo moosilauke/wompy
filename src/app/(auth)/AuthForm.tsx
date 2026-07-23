@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { isSupabaseConfigured, NEXT_PUBLIC_APP_URL } from "@/lib/env";
+import {
+  isSupabaseConfigured,
+  NEXT_PUBLIC_APP_URL,
+  PUBLIC_SITE_URL,
+} from "@/lib/env";
 import { GMAIL_SCOPES } from "@/lib/email/providers";
 import { welcomeCurrentUser } from "./actions";
 
@@ -95,7 +99,17 @@ function AuthFormFields() {
 
       // 2. Credentials didn't match. Either the account doesn't exist yet, or
       //    it does and the password is wrong.
-      const signUp = await supabase.auth.signUp({ email, password });
+      const signUp = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          // Tell Supabase where the confirmation link should land, rather than
+          // relying solely on the dashboard Site URL — PUBLIC_SITE_URL never
+          // resolves to localhost, so a stale dashboard setting can't send a
+          // real user a broken confirmation link.
+          emailRedirectTo: `${PUBLIC_SITE_URL}/auth/callback`,
+        },
+      });
       if (signUp.error) throw signUp.error;
 
       // Supabase signals "this address is already registered" by returning a

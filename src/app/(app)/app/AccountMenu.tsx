@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { signOut } from "../actions";
 import { initialsFor } from "@/lib/email/addresses";
+import { lastSyncedLabel } from "@/lib/format";
 
 /**
  * Account menu in the top-right.
@@ -29,16 +30,20 @@ export interface AccountMenuItem {
   comingSoon?: boolean;
   /** Separates groups; rendered above this item. */
   startsGroup?: boolean;
+  /** Native hover tooltip (title attribute). */
+  title?: string;
 }
 
 export function AccountMenu({
   userEmail,
   isAdmin,
+  lastSyncedAt,
   onSync,
   syncing,
 }: {
   userEmail: string | null;
   isAdmin: boolean;
+  lastSyncedAt: string | null;
   onSync: () => void;
   syncing: boolean;
 }) {
@@ -72,6 +77,7 @@ export function AccountMenu({
     {
       id: "sync",
       label: syncing ? "Syncing…" : "Sync now",
+      title: lastSyncedLabel(lastSyncedAt),
       onSelect: () => {
         onSync();
         setOpen(false);
@@ -198,6 +204,7 @@ function MenuRow({
       ref={buttonRef}
       type="button"
       role="menuitem"
+      title={item.title}
       onClick={item.onSelect}
       className={`${className} text-text-body hover:bg-black/[0.04]`}
     >

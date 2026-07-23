@@ -37,19 +37,23 @@ const MORE_VIEWS: { id: AppView; label: string }[] = [
 export function TopBar({
   userEmail,
   isAdmin,
+  lastSyncedAt,
   activeTab,
   counts,
   onSelectTab,
 }: {
   userEmail: string | null;
   isAdmin: boolean;
+  lastSyncedAt: string | null;
   activeTab: AppView;
   counts: Record<AppView, number>;
   onSelectTab: (tab: AppView) => void;
 }) {
   // Polling lives here so the manual control (in the account menu) and the
-  // status indicator (in the bar) share one source of truth.
-  const { runSync, syncing, lastError, needsReauth } = useSyncPoller();
+  // status indicator (in the bar) share one source of truth. The server-seeded
+  // last-synced time flows in here and is advanced by the hook after each sync.
+  const { runSync, syncing, lastError, needsReauth, lastSyncedAt: syncedAt } =
+    useSyncPoller(lastSyncedAt);
 
   return (
     <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
@@ -94,6 +98,7 @@ export function TopBar({
         <AccountMenu
           userEmail={userEmail}
           isAdmin={isAdmin}
+          lastSyncedAt={syncedAt}
           onSync={() => void runSync()}
           syncing={syncing}
         />

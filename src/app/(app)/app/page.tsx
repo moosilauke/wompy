@@ -89,7 +89,7 @@ export default async function AppPage({
     { count: trashCount },
   ] = await Promise.all([
     // Connected inbox addresses — used to decide which bubbles are "mine".
-    supabase.from("email_accounts").select("email"),
+    supabase.from("email_accounts").select("email, last_synced_at"),
     // Latest surviving message per thread. This decides which threads exist at
     // all: deleting the last message in a conversation must remove it from the
     // rail rather than leave an empty row. `trashed_at is null` does that.
@@ -137,11 +137,22 @@ export default async function AppPage({
 
   // Canonicalized so `Kevincole@`, `kevin.cole@`, and `kevincole+tag@` all match
   // the connected account.
+  const accountRows = (accounts ?? []) as {
+    email: string;
+    last_synced_at: string | null;
+  }[];
   const selfAddresses = new Set(
-    (accounts ?? []).map((a) =>
-      canonicalAddress((a as { email: string }).email),
-    ),
+    accountRows.map((a) => canonicalAddress(a.email)),
   );
+
+  // The most recent sync across connected accounts, seeding the menu's "last
+  // synced" tooltip. The client updates it live after each sync.
+  const lastSyncedAt =
+    accountRows
+      .map((a) => a.last_synced_at)
+      .filter((t): t is string => Boolean(t))
+      .sort()
+      .at(-1) ?? null;
 
   const snippetByThread = new Map<string, string>();
   for (const row of (recentRows ?? []) as {
@@ -523,6 +534,7 @@ export default async function AppPage({
       <AppShell
         userEmail={userEmail}
         isAdmin={Boolean((profileRow as { is_admin: boolean } | null)?.is_admin)}
+        lastSyncedAt={lastSyncedAt}
         initialTab={activeTab}
         counts={counts}
         railByTab={railByTab}

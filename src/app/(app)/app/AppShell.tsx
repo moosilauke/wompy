@@ -23,6 +23,7 @@ import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 export function AppShell({
   userEmail,
   isAdmin,
+  lastSyncedAt,
   initialTab,
   counts,
   railByTab,
@@ -32,6 +33,7 @@ export function AppShell({
 }: {
   userEmail: string | null;
   isAdmin: boolean;
+  lastSyncedAt: string | null;
   initialTab: AppView;
   counts: Record<AppView, number>;
   railByTab: Record<ContactTab, RailThread[]>;
@@ -82,6 +84,7 @@ export function AppShell({
       <TopBar
         userEmail={userEmail}
         isAdmin={isAdmin}
+        lastSyncedAt={lastSyncedAt}
         activeTab={activeTab}
         counts={counts}
         onSelectTab={selectTab}

@@ -17,11 +17,17 @@ const POLL_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
  * account menu while the reconnect prompt stays in the bar — the two need the
  * same state without two copies of the polling logic.
  */
-export function useSyncPoller() {
+export function useSyncPoller(initialLastSyncedAt: string | null = null) {
   const router = useRouter();
   const inFlight = useRef(false);
   const [syncing, setSyncing] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  // Seeded from the server value at load, then advanced client-side on each
+  // successful sync so the account menu's "Last synced" tooltip updates
+  // immediately, without waiting for a round-trip to re-read the row.
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
+    initialLastSyncedAt,
+  );
   // Distinct from a generic error: this one the user can actually fix, and the
   // only fix is re-granting access. Mirrored into a ref so the polling callback
   // reads the current value rather than one captured when it was created.
@@ -52,7 +58,10 @@ export function useSyncPoller() {
         reauthRef.current = reauth;
         setNeedsReauth(reauth);
         setLastError(null);
-        if (!reauth) router.refresh();
+        if (!reauth) {
+          setLastSyncedAt(new Date().toISOString());
+          router.refresh();
+        }
       }
     } catch (err) {
       setLastError(err instanceof Error ? err.message : "sync failed");
@@ -77,7 +86,7 @@ export function useSyncPoller() {
     };
   }, [runSync]);
 
-  return { runSync, syncing, lastError, needsReauth };
+  return { runSync, syncing, lastError, needsReauth, lastSyncedAt };
 }
 
 /**

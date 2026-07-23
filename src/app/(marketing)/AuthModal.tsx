@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { AuthForm } from "@/app/(auth)/AuthForm";
@@ -30,9 +30,29 @@ export function AuthModal() {
 function AuthModalInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const open = searchParams.get("auth") === "1";
+  const paramsOpen = searchParams.get("auth") === "1";
+
+  // Mirrored into state rather than read directly from the URL: `/` is
+  // statically prerendered, and next.config's staleTimes keeps its client
+  // Router Cache entry fresh for 180s. router.replace("/") after closing
+  // targets that same cached pathname, so on a soft navigation the cache can
+  // serve the stale (still-open) subtree back without ever re-deriving `open`
+  // from the new searchParams — the URL updates but the modal doesn't close.
+  // Local state closes it immediately regardless of what the cache does.
+  //
+  // Derived during render (React's documented pattern for "external prop
+  // changed, resync state") rather than in an effect, so the URL still wins
+  // when it disagrees with the last local close — e.g. Back to a `?auth=1`
+  // history entry, or the server redirecting a signed-out user here.
+  const [open, setOpen] = useState(paramsOpen);
+  const [lastParamsOpen, setLastParamsOpen] = useState(paramsOpen);
+  if (paramsOpen !== lastParamsOpen) {
+    setLastParamsOpen(paramsOpen);
+    setOpen(paramsOpen);
+  }
 
   const close = () => {
+    setOpen(false);
     // Drop the auth params but keep anything else on the URL.
     const params = new URLSearchParams(searchParams.toString());
     params.delete("auth");

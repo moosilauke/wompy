@@ -26,11 +26,19 @@ const AUTH_ROUTES = ["/login", "/signup"];
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
-  // The landing page is public and statically rendered. Skipping the session
-  // work here keeps first paint off the auth path entirely — a visitor with no
-  // cookie has nothing to refresh, and this is the page where a slow response
-  // costs the most.
-  if (request.nextUrl.pathname === "/") return response;
+  const { pathname } = request.nextUrl;
+
+  // The landing page is public and statically rendered. An ANONYMOUS visitor —
+  // no Supabase auth cookie — skips the session work entirely, keeping first
+  // paint off the auth path on the page where a slow response costs the most.
+  //
+  // A visitor who DOES carry an auth cookie falls through to the normal session
+  // check below, which redirects them to /app: a signed-in user shouldn't land
+  // on the marketing page. The cost of the check is paid only by people who are
+  // (probably) signed in, never by first-time visitors.
+  if (pathname === "/" && !hasAuthCookie(request)) {
+    return response;
+  }
 
   // Before credentials are configured, don't touch Supabase — let the app boot
   // so the developer can see it's alive (auth pages show a "configure me" note).
@@ -69,7 +77,16 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getClaims();
   const user = claims?.claims ?? null;
 
-  const { pathname } = request.nextUrl;
+  // A signed-in user on the landing page goes straight to the app. (An
+  // anonymous visitor never reaches here — they were returned above before any
+  // session work. A stale/invalid cookie leaves `user` null, so they correctly
+  // stay on the landing page.)
+  if (pathname === "/" && user) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/app";
+    return NextResponse.redirect(url);
+  }
+
   const isProtected = PROTECTED_PREFIXES.some(
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
@@ -90,6 +107,23 @@ export async function proxy(request: NextRequest) {
   }
 
   return response;
+}
+
+/**
+ * Whether the request carries a Supabase auth cookie.
+ *
+ * @supabase/ssr stores the session in a cookie named `sb-<ref>-auth-token`
+ * (chunked as `…-auth-token.0`, `.1` when large). A cheap prefix/suffix check is
+ * enough to distinguish "possibly signed in" from "definitely anonymous" — the
+ * cookie's validity is confirmed by getClaims afterward, so a forged or stale
+ * cookie just falls through to the normal null-user handling.
+ */
+function hasAuthCookie(request: NextRequest): boolean {
+  return request.cookies
+    .getAll()
+    .some(
+      (c) => c.name.startsWith("sb-") && c.name.includes("-auth-token"),
+    );
 }
 
 export const config = {

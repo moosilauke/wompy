@@ -14,9 +14,9 @@ import { lastSyncedLabel } from "@/lib/format";
  * in the bar, which meant Sign Out occupied the coral primary-action slot —
  * prominence exactly inverted from how often anyone wants it.
  *
- * Items that don't exist yet are rendered disabled rather than omitted, so the
- * shape of the menu is stable as they land and their absence is visible rather
- * than mysterious.
+ * Rendered on every page via PageShell (settings, admin, etc.), not just the
+ * mail view, so items tied to mail-view-only state (Sync now) render
+ * conditionally rather than assuming that state exists.
  */
 
 export interface AccountMenuItem {
@@ -37,15 +37,18 @@ export interface AccountMenuItem {
 export function AccountMenu({
   userEmail,
   isAdmin,
-  lastSyncedAt,
+  lastSyncedAt = null,
   onSync,
-  syncing,
+  syncing = false,
 }: {
   userEmail: string | null;
   isAdmin: boolean;
-  lastSyncedAt: string | null;
-  onSync: () => void;
-  syncing: boolean;
+  lastSyncedAt?: string | null;
+  /** Omit on pages with no live SyncPoller (anything outside /app) — the Sync
+   * now item only renders when this is provided, rather than being a dead
+   * click or standing in for state that doesn't exist there. */
+  onSync?: () => void;
+  syncing?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -74,17 +77,26 @@ export function AccountMenu({
   }, [open]);
 
   const items: AccountMenuItem[] = [
+    // Only on pages with a live poller to run (see the prop comment above).
+    ...(onSync
+      ? [
+          {
+            id: "sync",
+            label: syncing ? "Syncing…" : "Sync now",
+            title: lastSyncedLabel(lastSyncedAt),
+            onSelect: () => {
+              onSync();
+              setOpen(false);
+            },
+          },
+        ]
+      : []),
     {
-      id: "sync",
-      label: syncing ? "Syncing…" : "Sync now",
-      title: lastSyncedLabel(lastSyncedAt),
-      onSelect: () => {
-        onSync();
-        setOpen(false);
-      },
+      id: "settings",
+      label: "Settings",
+      href: "/settings",
+      startsGroup: Boolean(onSync),
     },
-    { id: "profile", label: "Profile", comingSoon: true, startsGroup: true },
-    { id: "settings", label: "Settings", comingSoon: true },
     // Admin appears ONLY for admins — a real link, not a "Soon" placeholder.
     // A non-admin sees no trace of it, so the panel's existence isn't hinted
     // at from here.

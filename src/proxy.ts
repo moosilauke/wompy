@@ -19,7 +19,7 @@ import {
 // Routes that require an authenticated user. `/admin` is additionally gated by
 // an is-admin check inside the page itself (which 404s non-admins); the proxy
 // only ensures they're signed in first.
-const PROTECTED_PREFIXES = ["/debug", "/app", "/admin"];
+const PROTECTED_PREFIXES = ["/debug", "/app", "/admin", "/settings"];
 // Auth routes a signed-in user should be redirected away from.
 const AUTH_ROUTES = ["/login", "/signup"];
 

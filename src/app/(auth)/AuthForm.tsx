@@ -3,11 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import {
-  isSupabaseConfigured,
-  NEXT_PUBLIC_APP_URL,
-  PUBLIC_SITE_URL,
-} from "@/lib/env";
+import { isSupabaseConfigured, PUBLIC_SITE_URL } from "@/lib/env";
 import { GMAIL_SCOPES } from "@/lib/email/providers";
 import { welcomeCurrentUser } from "./actions";
 
@@ -173,10 +169,15 @@ function AuthFormFields() {
     setError(null);
     setPending(true);
     try {
+      // The browser's real origin, not a build-time-inlined env var. This is
+      // correct in every environment automatically — localhost locally,
+      // www.wompymail.com in production — so a missing or stale
+      // NEXT_PUBLIC_APP_URL at build time can't send prod users to localhost.
+      const origin = window.location.origin;
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${NEXT_PUBLIC_APP_URL}/auth/callback?next=${encodeURIComponent(next)}`,
+          redirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
           scopes: GMAIL_SCOPES.join(" "),
           queryParams: { access_type: "offline" },
         },

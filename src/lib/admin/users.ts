@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { NEXT_PUBLIC_APP_URL } from "@/lib/env";
+import { PUBLIC_SITE_URL } from "@/lib/env";
 
 /**
  * Admin user operations.
@@ -184,7 +184,9 @@ export async function setAdmin(
 export async function sendPasswordReset(email: string): Promise<void> {
   const admin = createAdminClient();
   const { error } = await admin.auth.resetPasswordForEmail(email, {
-    redirectTo: `${NEXT_PUBLIC_APP_URL}/login`,
+    // PUBLIC_SITE_URL, not NEXT_PUBLIC_APP_URL: this goes into an EMAIL link, so
+    // it must never be localhost. PUBLIC_SITE_URL falls back to the live domain.
+    redirectTo: `${PUBLIC_SITE_URL}/login`,
   });
   if (error) throw error;
 }

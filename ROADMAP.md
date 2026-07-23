@@ -44,6 +44,10 @@ Last updated: 2026-07-21
 - Organization names derived for functional addresses (`no-reply@sentinelone.com`
   → "SentinelOne"), only where the local part is generic and the domain isn't
   free-mail
+- Welcome email via Mailtrap, sent once per new user (guarded by
+  `profiles.welcomed_at`) across both the Google-OAuth and email/password signup
+  paths. Never blocks signup. Confirmation & password-reset stay on Supabase's
+  secure token flows.
 - Company logos via Brandfetch Logo Link, on the Companies tab only. Resolves
   the registrable domain (email.schwab.com → schwab.com), skips ESP domains that
   would show the wrong brand (feefo.com), never people or spam, and falls back
@@ -109,7 +113,10 @@ urgent, but cheaper to build before there are many rows.
 - **Stats page** — unlike Gmail etc, we'll gamify things slightly by displaying some fun stats/metrics/analytics; leans into our brand ethos of being more than just a Gmail clone
 - **Admin panel** — user list with actions is done (see Shipped). Still to add:
   subscription status (needs the payments work first)
-- **Transactional emails** — welcome, account confirmation, password reset. Will use Mailtrap for this.
+- **Transactional emails** — welcome email is done via Mailtrap (see Shipped).
+  Account confirmation & password reset stay on Supabase's own token flows;
+  point Supabase Auth SMTP at Mailtrap in the dashboard so they deliver
+  reliably (config, not code). Future app-originated emails reuse the mailer.
 - **Continue performance enhancements** — delete is fixed (batched); next
   candidates are per-thread message fetch and the full-mailbox reclassify that
   runs on every sync

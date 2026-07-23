@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured, NEXT_PUBLIC_APP_URL } from "@/lib/env";
 import { GMAIL_SCOPES } from "@/lib/email/providers";
+import { welcomeCurrentUser } from "./actions";
 
 /**
  * One form for signing in and signing up.
@@ -113,11 +114,17 @@ function AuthFormFields() {
       }
 
       if (!signUp.data.session) {
-        // Email confirmation is enabled, so there's no session yet.
+        // Email confirmation is enabled, so there's no session yet. The welcome
+        // fires later, when they click the confirmation link and hit
+        // /auth/callback.
         setNotice("Check your email to confirm your account, then come back.");
         return;
       }
 
+      // New account with an immediate session (confirmation disabled). This path
+      // bypasses /auth/callback, so send the welcome here. Fire-and-forget — a
+      // welcome failure must not hold up entering the app.
+      void welcomeCurrentUser();
       finish();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");

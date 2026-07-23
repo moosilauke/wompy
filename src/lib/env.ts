@@ -53,6 +53,28 @@ export const serverEnv = {
   get googleRedirectUri() {
     return required("GOOGLE_REDIRECT_URI", process.env.GOOGLE_REDIRECT_URI);
   },
+  /** Mailtrap Email API token, for the transactional email we originate. */
+  get mailtrapApiToken() {
+    return required("MAILTRAP_API_TOKEN", process.env.MAILTRAP_API_TOKEN);
+  },
+  /**
+   * The From address for our transactional email. Must be on a domain verified
+   * in Mailtrap, or sends are rejected. Falls back to a noreply on the app's
+   * host when unset.
+   */
+  get mailFromEmail() {
+    return process.env.MAILTRAP_FROM_EMAIL ?? "hello@wompymail.com";
+  },
+  get mailFromName() {
+    return process.env.MAILTRAP_FROM_NAME ?? "Wompy";
+  },
+  /**
+   * Whether transactional email is configured. Lets sends no-op gracefully in
+   * environments without the token (local dev, previews) instead of throwing.
+   */
+  get isMailConfigured() {
+    return Boolean(process.env.MAILTRAP_API_TOKEN);
+  },
   /**
    * 32-byte key (base64 or hex) encrypting OAuth tokens at rest. Must live
    * outside the database — its whole purpose is that a database compromise

@@ -4,6 +4,7 @@ import {
   fetchGmailAddress,
   upsertGoogleTokensForUser,
 } from "@/lib/gmail/auth";
+import { maybeSendWelcome } from "@/lib/email/welcome";
 
 /**
  * Supabase auth callback. Handles:
@@ -57,6 +58,12 @@ export async function GET(request: Request) {
       // Gmail scope not granted (or profile fetch failed) → account only, no
       // inbox connected. The user can connect Gmail later from /debug.
     }
+  }
+
+  // Welcome a first-time user. Guarded by welcomed_at, so this no-ops on the
+  // returning-login case that also reaches this callback.
+  if (user) {
+    await maybeSendWelcome(user.id, user.email ?? null);
   }
 
   return NextResponse.redirect(`${origin}${next}`);

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar } from "./TopBar";
 import { ContactRail, type RailThread } from "./ContactRail";
+import { MobileRailDrawer } from "./MobileRailDrawer";
 import type { ContactSuggestion } from "./NewMessage";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 
@@ -79,12 +80,6 @@ export function AppShell({
   // narrowed value rather than a boolean so the rail's props typecheck.
   const railTab = isThreadView(activeTab) ? activeTab : null;
 
-  // On mobile, the rail and the pane take turns rather than sharing the
-  // screen: a view with no rail (Sent/Trash) or an open thread counts as
-  // "detail", which hides the rail and shows the pane full-width. At md+
-  // both always show side by side, same as before.
-  const hasDetail = !railTab || Boolean(selectedId);
-
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <TopBar
@@ -97,17 +92,28 @@ export function AppShell({
       />
       <div className="flex min-h-0 flex-1">
         {railTab && (
-          <ContactRail
-            threads={railByTab[railTab]}
-            selectedId={selectedId}
-            activeTab={railTab}
-            contactSuggestions={contactSuggestions}
-            className={hasDetail ? "hidden md:flex" : "flex"}
-          />
+          <>
+            {/* Desktop: inline sidebar, as always. */}
+            <div className="hidden md:flex">
+              <ContactRail
+                threads={railByTab[railTab]}
+                selectedId={selectedId}
+                activeTab={railTab}
+                contactSuggestions={contactSuggestions}
+              />
+            </div>
+            {/* Mobile: overlay drawer, so the reading pane is the default view. */}
+            <MobileRailDrawer>
+              <ContactRail
+                threads={railByTab[railTab]}
+                selectedId={selectedId}
+                activeTab={railTab}
+                contactSuggestions={contactSuggestions}
+              />
+            </MobileRailDrawer>
+          </>
         )}
-        <div className={`min-h-0 min-w-0 flex-1 ${hasDetail ? "flex" : "hidden md:flex"}`}>
-          {children}
-        </div>
+        <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
       </div>
     </div>
   );

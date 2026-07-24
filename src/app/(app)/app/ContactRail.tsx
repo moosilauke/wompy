@@ -38,14 +38,19 @@ export function ContactRail({
   selectedId,
   activeTab,
   contactSuggestions,
+  className = "w-[320px] shrink-0",
 }: {
   threads: RailThread[];
   selectedId: string | null;
   activeTab: ContactTab;
   contactSuggestions: ContactSuggestion[];
+  /** Sizing override — the mobile drawer fills its own panel instead of the fixed desktop width. */
+  className?: string;
 }) {
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-r border-spruce-edge bg-spruce shadow-[2px_0_16px_rgba(0,0,0,0.15)]">
+    <aside
+      className={`flex h-full flex-col border-r border-spruce-edge bg-spruce shadow-[2px_0_16px_rgba(0,0,0,0.15)] ${className}`}
+    >
       {/* Search lives in the top bar, where it spans both panes rather than
           looking scoped to the contact list. */}
       <div className="px-4 pb-2.5 pt-4">

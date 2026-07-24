@@ -109,6 +109,7 @@ export function AppShell({
                 selectedId={selectedId}
                 activeTab={railTab}
                 contactSuggestions={contactSuggestions}
+                className="w-full"
               />
             </MobileRailDrawer>
           </>

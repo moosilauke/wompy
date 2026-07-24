@@ -11,12 +11,15 @@ const EDGE_SWIPE_ZONE = 24; // px from the left edge that starts a drag
  * view. Desktop is unaffected — `AppShell` only renders this below `md`, and
  * renders `ContactRail` inline (no drawer chrome) at `md` and up.
  *
- * A small edge handle is always visible as the "you can pull this out"
- * affordance; both it and a thin edge-swipe zone start a drag that tracks the
- * pointer 1:1 via `translateX`, snapping open or shut on release based on
- * how far past the drawer's width the drag went. No gesture library is in
- * the project, so this is hand-rolled with pointer events (unifies touch and
- * mouse, unlike separate touch handlers).
+ * A small handle is always visible, riding the drawer's leading edge when
+ * closed (hinting it can be pulled out, caret pointing in) and its trailing
+ * edge when open (hinting it can be pushed back, caret pointing out) — one
+ * consistent grab point either direction. It and a thin edge-swipe zone
+ * (while closed) both start a drag that tracks the pointer 1:1 via
+ * `translateX`, snapping open or shut on release based on how far past the
+ * drawer's width the drag went. No gesture library is in the project, so
+ * this is hand-rolled with pointer events (unifies touch and mouse, unlike
+ * separate touch handlers).
  */
 export function MobileRailDrawer({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -105,22 +108,9 @@ export function MobileRailDrawer({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {/* Persistent affordance: always visible at rest, hints the drawer can
-          be pulled out. Also a tap target to open it outright. */}
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        onPointerDown={startDrag}
-        aria-label="Open conversations"
-        aria-expanded={open}
-        className={`fixed left-0 top-1/2 z-40 flex h-14 w-6 -translate-y-1/2 items-center justify-center rounded-r-[10px] bg-spruce text-on-spruce-muted shadow-[2px_0_10px_rgba(0,0,0,0.2)] transition-opacity md:hidden ${
-          open ? "pointer-events-none opacity-0" : "opacity-100"
-        }`}
-      >
-        <span aria-hidden className="text-[11px]">›</span>
-      </button>
-
-      {/* Thin invisible edge-swipe zone, active only while closed. */}
+      {/* Thin invisible edge-swipe zone, active only while closed — lets a
+          swipe starting anywhere near the edge open the drawer, not just a
+          tap on the handle itself. */}
       {!open && (
         <div
           onPointerDown={startDrag}
@@ -161,14 +151,30 @@ export function MobileRailDrawer({ children }: { children: React.ReactNode }) {
         }`}
         style={{ transform: translate }}
       >
-        {/* Drag handle strip along the drawer's own trailing edge, so an
-            already-open drawer can be dragged shut too. */}
-        <div
-          onPointerDown={startDrag}
-          className="absolute inset-y-0 -right-3 z-10 w-6"
-        />
         {children}
       </div>
+
+      {/* Handle: rides the drawer's leading edge when closed (caret pointing
+          in, hinting it can be pulled out) and its trailing edge when open
+          (caret pointing out, hinting it can be pushed back) — one
+          consistent grab point either direction. Rendered after the panel so
+          it always paints on top at the same z-index. */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onPointerDown={startDrag}
+        aria-label={open ? "Close conversations" : "Open conversations"}
+        aria-expanded={open}
+        className="fixed top-1/2 z-50 flex h-14 w-6 -translate-y-1/2 items-center justify-center rounded-r-[10px] bg-spruce text-on-spruce-muted shadow-[2px_0_10px_rgba(0,0,0,0.2)] md:hidden"
+        style={{
+          left: dragging ? dragX! : open ? panelWidth : 0,
+          transition: dragging ? undefined : "left 200ms ease-out",
+        }}
+      >
+        <span aria-hidden className="text-[11px]">
+          {open || dragging ? "‹" : "›"}
+        </span>
+      </button>
     </>
   );
 }

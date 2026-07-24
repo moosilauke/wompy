@@ -56,11 +56,11 @@ export function TopBar({
     useSyncPoller(lastSyncedAt);
 
   return (
-    <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
-      <div className="flex items-center gap-7">
+    <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-3 shadow-[0_2px_12px_rgba(0,0,0,0.05)] md:px-7">
+      <div className="flex min-w-0 items-center gap-3 md:gap-7">
         <BrandMark />
 
-        <nav className="flex items-center gap-1">
+        <nav className="flex min-w-0 items-center gap-1">
           {TABS.map((tab) => {
             const active = tab.id === activeTab;
             return (
@@ -69,7 +69,7 @@ export function TopBar({
                 type="button"
                 onClick={() => onSelectTab(tab.id)}
                 aria-current={active ? "page" : undefined}
-                className={`rounded-[10px] px-[13px] py-[7px] text-[13px] font-bold transition-colors ${
+                className={`rounded-[10px] px-2.5 py-1.5 text-[13px] font-bold transition-colors md:px-[13px] md:py-[7px] ${
                   active
                     ? "bg-[oklch(0.8_0.13_175_/_0.25)] text-white"
                     : "text-on-spruce-muted hover:text-white"
@@ -91,8 +91,12 @@ export function TopBar({
         </nav>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Search />
+      <div className="flex shrink-0 items-center gap-3">
+        {/* Search collapses below md for this baseline pass; a mobile entry
+            point (icon-triggered full-screen search) is future polish. */}
+        <div className="hidden md:block">
+          <Search />
+        </div>
         {/* Only renders when something needs attention. */}
         <SyncStatus lastError={lastError} needsReauth={needsReauth} />
         <AccountMenu

@@ -38,14 +38,20 @@ export function ContactRail({
   selectedId,
   activeTab,
   contactSuggestions,
+  className = "flex",
 }: {
   threads: RailThread[];
   selectedId: string | null;
   activeTab: ContactTab;
   contactSuggestions: ContactSuggestion[];
+  /** Visibility classes from AppShell — mobile shows either the rail or the pane, never both. */
+  className?: string;
 }) {
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-r border-spruce-edge bg-spruce shadow-[2px_0_16px_rgba(0,0,0,0.15)]">
+    <aside
+      className={`${className} w-full shrink-0 flex-col border-r border-spruce-edge bg-spruce shadow-[2px_0_16px_rgba(0,0,0,0.15)] md:w-[320px]`}
+    >
+
       {/* Search lives in the top bar, where it spans both panes rather than
           looking scoped to the contact list. */}
       <div className="px-4 pb-2.5 pt-4">

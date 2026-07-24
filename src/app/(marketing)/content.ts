@@ -98,7 +98,7 @@ export const PLANS = [
  * (no page yet); only ones with an `href` are live, so nothing 404s.
  */
 export const MORE_LINKS: { label: string; href?: string }[] = [
-  { label: "About us" },
+  { label: "About Wompy" },
   { label: "Documentation" },
   { label: "Privacy policy", href: "/privacy" },
   { label: "FAQs" },

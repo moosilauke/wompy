@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { CompanyCard } from "./CompanyCard";
 import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
@@ -55,10 +56,19 @@ export function CompanyPane({
     );
   }
 
+  const backHref = isSpam ? "/app?tab=spam" : "/app?tab=company";
+
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-reading-pane">
       {/* Header */}
-      <div className="flex h-[76px] shrink-0 items-center gap-3.5 border-b border-black/[0.06] bg-cream px-7 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+      <div className="flex h-[76px] shrink-0 items-center gap-3.5 border-b border-black/[0.06] bg-cream px-4 shadow-[0_2px_12px_rgba(0,0,0,0.04)] md:px-7">
+        <Link
+          href={backHref}
+          aria-label="Back to list"
+          className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-body transition-colors hover:bg-black/[0.04] md:hidden"
+        >
+          <span aria-hidden className="text-lg">←</span>
+        </Link>
         <Avatar
           address={thread.primaryAddress}
           label={thread.label}
@@ -79,7 +89,7 @@ export function CompanyPane({
       <ScrollToLatest
         threadId={thread.id}
         messageCount={messages.length}
-        className="flex-1 overflow-y-auto px-7 py-6"
+        className="flex-1 overflow-y-auto px-4 py-4 md:px-7 md:py-6"
       >
         {isSpam && (
           <p className="mb-4 rounded-[14px] border border-coral/25 bg-coral/10 px-4 py-3 text-[13px] text-text-muted">

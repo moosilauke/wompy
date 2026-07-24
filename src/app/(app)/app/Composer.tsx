@@ -64,7 +64,7 @@ export function Composer({
   }
 
   return (
-    <div className="shrink-0 px-8 pb-6 pt-4">
+    <div className="shrink-0 px-4 pb-4 pt-3 md:px-8 md:pb-6 md:pt-4">
       {error && (
         <p className="mb-2 text-[12.5px] font-bold text-coral">{error}</p>
       )}

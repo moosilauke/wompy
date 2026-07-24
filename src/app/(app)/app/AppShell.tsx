@@ -79,6 +79,12 @@ export function AppShell({
   // narrowed value rather than a boolean so the rail's props typecheck.
   const railTab = isThreadView(activeTab) ? activeTab : null;
 
+  // On mobile, the rail and the pane take turns rather than sharing the
+  // screen: a view with no rail (Sent/Trash) or an open thread counts as
+  // "detail", which hides the rail and shows the pane full-width. At md+
+  // both always show side by side, same as before.
+  const hasDetail = !railTab || Boolean(selectedId);
+
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <TopBar
@@ -96,9 +102,12 @@ export function AppShell({
             selectedId={selectedId}
             activeTab={railTab}
             contactSuggestions={contactSuggestions}
+            className={hasDetail ? "hidden md:flex" : "flex"}
           />
         )}
-        {children}
+        <div className={`min-h-0 min-w-0 flex-1 ${hasDetail ? "flex" : "hidden md:flex"}`}>
+          {children}
+        </div>
       </div>
     </div>
   );

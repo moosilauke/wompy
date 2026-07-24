@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Avatar } from "@/components/ui/Avatar";
 import { Bubble, BubbleRow, DayDivider } from "@/components/ui/Bubble";
 import { Composer } from "./Composer";
@@ -68,6 +69,8 @@ export function ReadingPane({
     );
   }
 
+  const backHref = "/app?tab=contact";
+
   // Precompute where day dividers go, rather than mutating during render.
   const showDividerFor = new Set<string>();
   let previousDay = "";
@@ -80,7 +83,14 @@ export function ReadingPane({
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-reading-pane">
       {/* Header */}
-      <div className="flex h-[76px] shrink-0 items-center gap-3.5 border-b border-black/[0.06] bg-cream px-7 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+      <div className="flex h-[76px] shrink-0 items-center gap-3.5 border-b border-black/[0.06] bg-cream px-4 shadow-[0_2px_12px_rgba(0,0,0,0.04)] md:px-7">
+        <Link
+          href={backHref}
+          aria-label="Back to conversations"
+          className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-body transition-colors hover:bg-black/[0.04] md:hidden"
+        >
+          <span aria-hidden className="text-lg">←</span>
+        </Link>
         <Avatar
           address={thread.primaryAddress}
           label={thread.label}
@@ -100,7 +110,7 @@ export function ReadingPane({
       <ScrollToLatest
         threadId={thread.id}
         messageCount={messages.length}
-        className="flex flex-1 flex-col gap-3 overflow-y-auto px-10 py-7"
+        className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-5 md:px-10 md:py-7"
       >
         {messages.length === 0 ? (
           <p className="text-center text-sm text-text-muted">

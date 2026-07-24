@@ -37,7 +37,7 @@ export function MessageListPane({
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-reading-pane">
-      <div className="flex h-[76px] shrink-0 items-center border-b border-black/[0.06] bg-cream px-7 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+      <div className="flex h-[76px] shrink-0 items-center border-b border-black/[0.06] bg-cream px-4 shadow-[0_2px_12px_rgba(0,0,0,0.04)] md:px-7">
         <div className="flex flex-col gap-0.5">
           <h2 className="font-display text-[17px] font-bold text-text-body">
             {copy.title}
@@ -48,7 +48,7 @@ export function MessageListPane({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-7 py-6">
+      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-7 md:py-6">
         {messages.length === 0 ? (
           <p className="text-center text-sm text-text-muted">{copy.empty}</p>
         ) : (

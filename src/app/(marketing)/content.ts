@@ -92,15 +92,3 @@ export const PLANS = [
   { label: "Plus — $6/mo", popular: true },
   { label: "Family — $12/mo", popular: false },
 ] as const;
-
-/**
- * Utility links in the rail's collapsible "More" section. Most render inert
- * (no page yet); only ones with an `href` are live, so nothing 404s.
- */
-export const MORE_LINKS: { label: string; href?: string }[] = [
-  { label: "About Wompy" },
-  { label: "Documentation" },
-  { label: "Privacy policy", href: "/privacy" },
-  { label: "FAQs" },
-  { label: "Get help" },
-];

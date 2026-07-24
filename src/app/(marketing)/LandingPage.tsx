@@ -1,9 +1,9 @@
 import { BrandMark } from "@/components/ui/BrandMark";
 import { Bubble, BubbleRow, DayDivider } from "@/components/ui/Bubble";
 import { RailRow } from "@/components/ui/RailRow";
+import { MoreLinks } from "@/components/chrome/MoreLinks";
 import { AuthModal } from "./AuthModal";
 import { AuthTrigger } from "./AuthTrigger";
-import { MoreLinks } from "./MoreLinks";
 import { SignupComposer } from "./SignupComposer";
 import { DEMO_CONTACTS, FEATURES, PLANS } from "./content";
 
@@ -81,7 +81,7 @@ export function LandingPage() {
             </ul>
           </nav>
 
-          <MoreLinks />
+          <MoreLinks defaultOpen />
         </aside>
 
         {/* Reading pane — the pitch, delivered as a conversation. */}

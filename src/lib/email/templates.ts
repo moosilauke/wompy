@@ -77,6 +77,61 @@ export async function sendWelcomeEmail(to: string): Promise<SendEmailResult> {
 }
 
 /**
+ * Send a visitor's Get Help contact form submission to the team inbox.
+ *
+ * reply-to is set to the visitor's address so hitting "reply" in the inbox
+ * goes straight back to them, even though the message is delivered from our
+ * own From address.
+ */
+export async function sendContactFormEmail(input: {
+  name: string;
+  email: string;
+  message: string;
+}): Promise<SendEmailResult> {
+  const { name, email, message } = input;
+
+  const text = [
+    `New Get Help submission from ${name} <${email}>`,
+    "",
+    message,
+  ].join("\n");
+
+  const html = wrapEmail(`
+    <tr><td style="padding: 0 0 8px;">
+      <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: ${TEXT};">
+        New Get Help submission
+      </h1>
+    </td></tr>
+    <tr><td style="padding: 0 0 16px;">
+      <p style="margin: 0; font-size: 14px; line-height: 1.6; color: ${MUTED};">
+        <strong style="color: ${TEXT};">${escapeHtml(name)}</strong>
+        &lt;${escapeHtml(email)}&gt;
+      </p>
+    </td></tr>
+    <tr><td>
+      <p style="margin: 0; font-size: 15px; line-height: 1.6; color: ${TEXT}; white-space: pre-wrap;">${escapeHtml(message)}</p>
+    </td></tr>
+  `);
+
+  return sendTransactionalEmail({
+    to: "hello@wompymail.com",
+    replyTo: email,
+    subject: `Get Help: ${name}`,
+    text,
+    html,
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
  * Wrap body rows in the shared email shell — centered card on a cream page,
  * with the wompy wordmark and a footer. Table-based for client compatibility.
  */

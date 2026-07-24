@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RailRow } from "@/components/ui/RailRow";
+import { MoreLinks } from "@/components/chrome/MoreLinks";
 import { railTimestamp } from "@/lib/format";
 import type { ContactTab } from "@/lib/types";
 import { NewMessageButton } from "./NewMessageButton";
@@ -101,6 +102,8 @@ export function ContactRail({
           </ul>
         )}
       </nav>
+
+      <MoreLinks defaultOpen={false} />
     </aside>
   );
 }

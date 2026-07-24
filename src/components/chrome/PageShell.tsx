@@ -34,7 +34,7 @@ export function PageShell({
     <div className="flex min-h-screen flex-col">
       <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-spruce-edge bg-spruce px-7 shadow-[0_2px_12px_rgba(0,0,0,0.05)]">
         <div className="flex items-center gap-7">
-          <Link href="/app" aria-label="Wompy">
+          <Link href={userEmail ? "/app" : "/"} aria-label="Wompy">
             <BrandMark />
           </Link>
           {back && (

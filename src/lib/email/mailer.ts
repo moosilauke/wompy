@@ -19,6 +19,9 @@ export interface SendEmailInput {
   subject: string;
   text: string;
   html: string;
+  /** Set when a reply should go somewhere other than mailFromEmail — e.g. the
+   * visitor's address on a contact-form submission. */
+  replyTo?: string;
 }
 
 export interface SendEmailResult {
@@ -58,6 +61,7 @@ export async function sendTransactionalEmail(
         subject: input.subject,
         text: input.text,
         html: input.html,
+        ...(input.replyTo ? { reply_to: { email: input.replyTo } } : {}),
       }),
     });
 

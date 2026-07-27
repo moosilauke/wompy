@@ -2,7 +2,10 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   buildParticipantSet,
+  canonicalAddress,
   collectParticipants,
+  parseAddress,
+  parseAddressList,
 } from "@/lib/email/addresses";
 
 /**
@@ -28,6 +31,10 @@ export interface ThreadingResult {
   threadsTouched: number;
   messagesLinked: number;
   contactsTouched: number;
+  /** Ids/addresses actually touched, so a caller can scope downstream work
+   * (classification) to what changed instead of the whole mailbox. */
+  threadIds: string[];
+  contactAddresses: string[];
 }
 
 /**
@@ -43,7 +50,13 @@ export async function groupMessagesIntoThreads(
   messages: ThreadableMessage[],
 ): Promise<ThreadingResult> {
   if (messages.length === 0) {
-    return { threadsTouched: 0, messagesLinked: 0, contactsTouched: 0 };
+    return {
+      threadsTouched: 0,
+      messagesLinked: 0,
+      contactsTouched: 0,
+      threadIds: [],
+      contactAddresses: [],
+    };
   }
 
   const admin = createAdminClient();
@@ -58,6 +71,15 @@ export async function groupMessagesIntoThreads(
   }
   const buckets = new Map<string, Bucket>();
   const contactNames = new Map<string, string | null>();
+  // Bare lowercased (NOT canonicalized) addresses of everyone the user has
+  // sent TO/CC'd in this batch — keyed the same way contactNames/contacts.address
+  // are, so it can be checked directly against contactRows below. This is the
+  // incremental source for contacts.has_replied (see migration 0018):
+  // recomputing "have I ever replied to X" by scanning all sent mail doesn't
+  // scale to a large mailbox, so this sets a one-way flag here, at the point a
+  // reply is actually ingested, and classify-run.ts never has to scan for it.
+  const repliedToAddresses = new Set<string>();
+  const selfCanonical = canonicalAddress(selfAddress);
 
   for (const msg of messages) {
     const parsed = collectParticipants(msg);
@@ -66,6 +88,21 @@ export async function groupMessagesIntoThreads(
       const existing = contactNames.get(p.address);
       if (existing === undefined || (!existing && p.displayName)) {
         contactNames.set(p.address, p.displayName);
+      }
+    }
+
+    const fromParsed = msg.from_address ? parseAddress(msg.from_address) : null;
+    if (fromParsed && canonicalAddress(fromParsed.address) === selfCanonical) {
+      for (const p of [
+        ...parseAddressList(msg.to_addresses),
+        ...parseAddressList(msg.cc_addresses),
+      ]) {
+        // Canonical check only to correctly exclude alias forms of the
+        // user's own address; the stored key is the bare address, matching
+        // contactNames/contacts.address's convention.
+        if (canonicalAddress(p.address) !== selfCanonical) {
+          repliedToAddresses.add(p.address);
+        }
       }
     }
 
@@ -95,10 +132,18 @@ export async function groupMessagesIntoThreads(
 
   // 2. Upsert contacts (names for the rail). Classification stays at its default
   //    until the classifier step fills `tab` / `classification_signals`.
+  //
+  //    has_replied is only ever included as `true`, and only for addresses
+  //    actually replied to in this batch — never `false`. It's a one-way flag
+  //    (once you've replied to someone, that never becomes untrue), and
+  //    omitting the key entirely for everyone else means PostgREST's upsert
+  //    leaves their existing value alone on conflict rather than clobbering it
+  //    back to the column default.
   const contactRows = [...contactNames.entries()].map(([address, name]) => ({
     user_id: userId,
     address,
     display_name: name,
+    ...(repliedToAddresses.has(address) ? { has_replied: true } : {}),
   }));
   if (contactRows.length > 0) {
     const { error } = await admin
@@ -146,6 +191,8 @@ export async function groupMessagesIntoThreads(
     threadsTouched: buckets.size,
     messagesLinked,
     contactsTouched: contactRows.length,
+    threadIds: [...threadIdByKey.values()],
+    contactAddresses: contactRows.map((c) => c.address),
   };
 }
 
@@ -200,6 +247,8 @@ export async function backfillThreadsForUser(
     threadsTouched: 0,
     messagesLinked: 0,
     contactsTouched: 0,
+    threadIds: [],
+    contactAddresses: [],
   };
 
   for (const account of accounts ?? []) {
@@ -220,6 +269,8 @@ export async function backfillThreadsForUser(
     total.threadsTouched += result.threadsTouched;
     total.messagesLinked += result.messagesLinked;
     total.contactsTouched += result.contactsTouched;
+    total.threadIds.push(...result.threadIds);
+    total.contactAddresses.push(...result.contactAddresses);
   }
 
   return total;

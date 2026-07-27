@@ -27,8 +27,29 @@ export interface ClassifyRunResult {
   threadsUpdated: number;
 }
 
+/**
+ * Restricts a classify run to specific contacts/threads instead of the whole
+ * mailbox. Omit (or pass nothing) to fall back to the original full-mailbox
+ * scan — used by the manual "reclassify everything" / `?rebuild=1` path,
+ * where re-deriving every row is the actual point.
+ *
+ * Scoping changes which CONTACTS get (re)classified and which THREADS get
+ * their tab re-derived. A scoped contact's OWN messages (list-unsubscribe
+ * headers, spam labels, mail-client message-ids) are matched via
+ * `from_canonical` (migration 0018), so the message read stays scoped too —
+ * reply-reciprocity used to require an unscoped scan of everything the user
+ * ever sent, but is now read directly off `contacts.has_replied`, maintained
+ * incrementally at ingest time (migration 0019), so it no longer forces a
+ * full scan either.
+ */
+export interface ClassifyScope {
+  contactAddresses?: string[];
+  threadIds?: string[];
+}
+
 export async function classifyUserMail(
   userId: string,
+  scope?: ClassifyScope,
 ): Promise<ClassifyRunResult> {
   const admin = createAdminClient();
 
@@ -54,39 +75,71 @@ export async function classifyUserMail(
     return parsed ? selfAddresses.has(canonicalAddress(parsed.address)) : false;
   };
 
-  // 1. One pass over the user's messages, serving both the reply-reciprocity
-  //    signal and the per-sender header merge below. This was two full-table
-  //    scans; the second also selected `raw_headers` whole, which was 171KB of
-  //    DKIM/ARC signature blocks to read three keys. Only the three keys the
-  //    classifier actually consults are projected, server-side.
+  const contactsFilter = scope?.contactAddresses;
+  const threadsFilter = scope?.threadIds;
+
+  // 1. One pass over the relevant messages, serving the per-sender header
+  //    merge below. This was two full-table scans; the second also selected
+  //    `raw_headers` whole, which was 171KB of DKIM/ARC signature blocks to
+  //    read three keys. Only the three keys the classifier actually consults
+  //    are projected, server-side.
+  //
+  //    Reply-reciprocity is NOT derived here anymore — it used to require
+  //    scanning every message the user ever sent, on every run, regardless of
+  //    scope (see migration 0019). contacts.has_replied is now maintained
+  //    incrementally by groupMessagesIntoThreads at ingest time, so this read
+  //    can be scoped like everything else.
   //
   //    Fetched alongside the contact and thread rows, which are independent of
-  //    it — only the writes further down depend on all three.
+  //    it — only the writes further down depend on both.
   const [
     { data: messageRows, error: messagesError },
     { data: contacts, error: contactsError },
     { data: threads, error: threadsError },
   ] = await Promise.all([
-    admin
-      .from("messages")
-      .select(
-        "from_address, to_addresses, cc_addresses, label_ids," +
-          "list_unsubscribe:raw_headers->>list-unsubscribe," +
-          "precedence:raw_headers->>precedence," +
-          "message_id:raw_headers->>message-id",
-      )
-      .eq("user_id", userId),
-    admin
-      .from("contacts")
-      // `tab` is selected so overridden rows need no re-read, and so unchanged
-      // rows can be skipped instead of rewritten.
-      .select("id, address, manually_overridden, tab")
-      .eq("user_id", userId),
-    admin
-      .from("threads")
-      // `tab` selected so unchanged threads can be skipped.
-      .select("id, participant_set, tab")
-      .eq("user_id", userId),
+    contactsFilter
+      ? admin
+          .from("messages")
+          .select(
+            "from_address, label_ids," +
+              "list_unsubscribe:raw_headers->>list-unsubscribe," +
+              "precedence:raw_headers->>precedence," +
+              "message_id:raw_headers->>message-id",
+          )
+          .eq("user_id", userId)
+          // from_canonical (not from_address, which is the raw header) so
+          // this matches contacts.address's canonical form exactly. See
+          // migration 0018.
+          .in("from_canonical", contactsFilter)
+      : admin
+          .from("messages")
+          .select(
+            "from_address, label_ids," +
+              "list_unsubscribe:raw_headers->>list-unsubscribe," +
+              "precedence:raw_headers->>precedence," +
+              "message_id:raw_headers->>message-id",
+          )
+          .eq("user_id", userId),
+    contactsFilter
+      ? admin
+          .from("contacts")
+          .select("id, address, manually_overridden, tab, has_replied")
+          .eq("user_id", userId)
+          .in("address", contactsFilter)
+      : admin
+          .from("contacts")
+          .select("id, address, manually_overridden, tab, has_replied")
+          .eq("user_id", userId),
+    threadsFilter
+      ? admin
+          .from("threads")
+          .select("id, participant_set, tab")
+          .eq("user_id", userId)
+          .in("id", threadsFilter)
+      : admin
+          .from("threads")
+          .select("id, participant_set, tab")
+          .eq("user_id", userId),
   ]);
   if (messagesError) throw messagesError;
   if (contactsError) throw contactsError;
@@ -94,8 +147,6 @@ export async function classifyUserMail(
 
   type MessageRow = {
     from_address: string | null;
-    to_addresses: string[] | null;
-    cc_addresses: string[] | null;
     label_ids: string[] | null;
     list_unsubscribe: string | null;
     precedence: string | null;
@@ -105,24 +156,6 @@ export async function classifyUserMail(
   // Cast through unknown: the generated types don't model PostgREST's
   // `alias:column->>key` JSON projection, so they infer a string-error shape.
   const allMessages = (messageRows ?? []) as unknown as MessageRow[];
-  const sentRows = allMessages.filter((row) => isFromSelf(row.from_address));
-
-  // Stored canonically so a reply sent to any alias form still matches. The
-  // user's own addresses are excluded so self-addressed mail doesn't make them
-  // their own contact.
-  const repliedTo = new Set<string>();
-  for (const row of sentRows as {
-    to_addresses: string[] | null;
-    cc_addresses: string[] | null;
-  }[]) {
-    for (const p of [
-      ...parseAddressList(row.to_addresses),
-      ...parseAddressList(row.cc_addresses),
-    ]) {
-      const canonical = canonicalAddress(p.address);
-      if (!selfAddresses.has(canonical)) repliedTo.add(canonical);
-    }
-  }
 
   // 2. Merge the signals seen from each sender. A sender is judged on the union
   //    of their messages, so one bulk-flagged message marks the sender.
@@ -179,6 +212,7 @@ export async function classifyUserMail(
     address: string;
     manually_overridden: boolean;
     tab: ContactTab;
+    has_replied: boolean;
   }[]) {
     if (contact.manually_overridden) {
       contactsSkippedOverridden += 1;
@@ -190,7 +224,7 @@ export async function classifyUserMail(
     const result = classifySender({
       address: contact.address,
       headers: headersByAddress.get(contact.address) ?? {},
-      hasReplied: repliedTo.has(canonicalAddress(contact.address)),
+      hasReplied: contact.has_replied,
       markedSpam: spamAddresses.has(contact.address),
       usesMailClient: mailClientAddresses.has(contact.address),
     });
@@ -219,13 +253,45 @@ export async function classifyUserMail(
 
   // 4. Derive each thread's tab from its participants. A thread with any
   //    Contact participant is a conversation, not a newsletter.
-  // Batched for the same reason as the contact writes above.
-  const threadUpdates: { id: string; tab: ContactTab }[] = [];
-  for (const thread of (threads ?? []) as {
+  //
+  //    tabByAddress only has entries for contacts in `contactsFilter` (or
+  //    every contact, unscoped). A scoped thread can include a participant who
+  //    wasn't in that scope — e.g. a group thread where only one of several
+  //    participants had new mail this run — and defaulting a merely-unscoped
+  //    participant to "company" would silently mis-tag threads with a real
+  //    Contact in them. So: look up every scoped thread's participants that
+  //    are still missing from tabByAddress, in one extra targeted query,
+  //    before deriving tabs. Bounded by "participants of the threads actually
+  //    in scope", not the whole mailbox.
+  const typedThreads = (threads ?? []) as {
     id: string;
     participant_set: string[];
     tab: ContactTab;
-  }[]) {
+  }[];
+
+  if (threadsFilter) {
+    const missing = new Set<string>();
+    for (const thread of typedThreads) {
+      for (const address of thread.participant_set ?? []) {
+        if (!tabByAddress.has(address)) missing.add(address);
+      }
+    }
+    if (missing.size > 0) {
+      const { data: extraContacts, error: extraError } = await admin
+        .from("contacts")
+        .select("address, tab")
+        .eq("user_id", userId)
+        .in("address", [...missing]);
+      if (extraError) throw extraError;
+      for (const c of (extraContacts ?? []) as { address: string; tab: ContactTab }[]) {
+        tabByAddress.set(c.address, c.tab);
+      }
+    }
+  }
+
+  // Batched for the same reason as the contact writes above.
+  const threadUpdates: { id: string; tab: ContactTab }[] = [];
+  for (const thread of typedThreads) {
     const tabs = (thread.participant_set ?? []).map(
       (address) => tabByAddress.get(address) ?? "company",
     );

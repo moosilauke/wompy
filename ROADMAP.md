@@ -3,7 +3,7 @@
 Working status and build order. Update this as things ship; it is the shared
 source of truth so decisions don't live only in chat history or a plan file.
 
-Last updated: 2026-07-21
+Last updated: 2026-07-24
 
 ---
 
@@ -89,16 +89,39 @@ Last updated: 2026-07-21
 - **OAuth tokens encrypted at rest** (AES-256-GCM, key in `TOKEN_ENCRYPTION_KEY`
   outside the database). Versioned envelope so the key can be rotated later;
   `npm run encrypt-tokens` migrates any legacy plaintext rows
+- **Deployed and live** at www.wompymail.com (Netlify). No marketing has gone
+  out yet — deliberate, per past experience that signups don't show up
+  overnight regardless — but the app is reachable and functional for anyone
+  who finds it right now, not just in local dev.
+- **Static pages**: About, Documentation, Get Help (with a contact form to
+  hello@wompymail.com), linked from the footer and the rail's More menu
 
 ---
 
 ## Next up
 
-### 1. Key rotation path
+Being live (even unmarketed) changes what "urgent" means — anyone could sign
+up today, so gaps that were invisible in local dev are now real risk, not
+future risk.
+
+### 1. Historical sync
+Upon sign-up, users don't see any of their old mail — only what arrives after
+they connect. This is a trust-breaker on first impression: someone connects
+Gmail expecting their inbox and sees nothing. Needs careful design (see
+Backlog note) rather than a quick fix, and is the highest-priority gap now
+that real signups are possible.
+
+### 2. Rate limits / API failure handling
+Nothing currently handles Gmail 429s or a failed token refresh beyond the
+reauth case. Was "invisible with one user, routine with fifty" — with the app
+live, that threshold is no longer hypothetical.
+
+### 3. Key rotation path
 Tokens are encrypted, but there's no way to re-key without every user
 reconnecting. The `v1:` envelope prefix was designed for this — a rotation
-script would decrypt with the old key and re-encrypt with the new one. Not
-urgent, but cheaper to build before there are many rows.
+script would decrypt with the old key and re-encrypt with the new one. Still
+cheaper to build before there are many rows, but behind the two above now
+that the row count could start growing at any time.
 
 ---
 
@@ -107,9 +130,10 @@ urgent, but cheaper to build before there are many rows.
 - **Settings/profile page** — collect deferred preferences (see below) until
   there are enough to justify building it
   - Tab badge counts: totals vs unreads
-- **Static pages** — documentation, privacy policy, about, Wompy vs Alternatives (competitive page), contact/help
+- **Static pages** — Wompy vs Alternatives (competitive page)
 - **Payment/subscriptions** — will use Creem
 - **Profile page** — includes email provider config/reconfig, personal settings, avatar upload, etc
+- **Add 2nd email provider** — likely Apple iCloud Mail or whatever it's called; need to seriously consider supporting multiple providers via one inbox
 - **Stats page** — unlike Gmail etc, we'll gamify things slightly by displaying some fun stats/metrics/analytics; leans into our brand ethos of being more than just a Gmail clone
 - **Admin panel** — user list with actions is done (see Shipped). Still to add:
   subscription status (needs the payments work first)
@@ -120,10 +144,6 @@ urgent, but cheaper to build before there are many rows.
 - **Continue performance enhancements** — delete is fixed (batched); next
   candidates are per-thread message fetch and the full-mailbox reclassify that
   runs on every sync
-
-- **Rate limits / API failure handling** — nothing currently handles Gmail 429s
-  or a failed token refresh beyond the reauth case. Invisible with one user,
-  routine with fifty.
 - **Contact and contacts' messages multi-select** — ability, via keyboard (ctrl and shift-click) and GUI to select multiple contact conversations and/or select multiple messages/emails from a contact
 - **Create groups** — net new messages only allow selecting one recipient currently vs multiple
 - **Add forwarding** — ability to forward a message to another contact(s)
@@ -134,7 +154,6 @@ urgent, but cheaper to build before there are many rows.
 - **Reply-to-one** in group threads (currently replies go to all participants)
 - **Spam false-positive escape** — a quarantined sender can only be rescued by
   replying to them in Gmail
-- **Deploy** — blocked on token encryption
 - `staleTimes` is an experimental Next flag; revisit when it stabilizes
 
 ---

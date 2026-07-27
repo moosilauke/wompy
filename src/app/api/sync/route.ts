@@ -47,6 +47,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no_accounts" }, { status: 400 });
   }
 
+  // Union of every contact address / thread id touched by this run's syncs
+  // and thread-healing, so classifyUserMail can scope its work to what
+  // actually changed instead of scanning the whole mailbox (see
+  // ClassifyScope). Left empty (falls back to full scan) whenever a step
+  // fails to report ids, or on a forced rebuild — see below.
+  const touchedContactAddresses = new Set<string>();
+  const touchedThreadIds = new Set<string>();
+
   const results = [];
   for (const account of accounts as EmailAccount[]) {
     if (account.provider !== "gmail") {
@@ -55,6 +63,8 @@ export async function POST(request: Request) {
     }
     try {
       const result = await syncAccount(account);
+      for (const a of result.threading.contactAddresses) touchedContactAddresses.add(a);
+      for (const id of result.threading.threadIds) touchedThreadIds.add(id);
       results.push({ email: account.email, ...result });
     } catch (err) {
       // A dead or missing refresh token is reported distinctly so the client can
@@ -75,7 +85,9 @@ export async function POST(request: Request) {
   //
   // `rebuild=1` forces a full re-derivation, needed after the keying logic
   // changes (e.g. Gmail alias normalization, which retroactively excludes the
-  // user's own dotted address from participant sets).
+  // user's own dotted address from participant sets). A forced rebuild also
+  // classifies unscoped below — every thread's derivation logic just changed,
+  // so every thread's tab is suspect, not just the ones this run touched.
   const forceRebuild =
     new URL(request.url).searchParams.get("rebuild") === "1";
 
@@ -84,6 +96,8 @@ export async function POST(request: Request) {
     backfill = forceRebuild
       ? await rebuildThreadsForUser(userId)
       : await backfillThreadsForUser(userId);
+    for (const a of backfill.contactAddresses) touchedContactAddresses.add(a);
+    for (const id of backfill.threadIds) touchedThreadIds.add(id);
   } catch (err) {
     backfill = {
       error: err instanceof Error ? err.message : "backfill_failed",
@@ -94,7 +108,12 @@ export async function POST(request: Request) {
   // after threading so every contact row exists; respects manual overrides.
   let classification = null;
   try {
-    classification = await classifyUserMail(userId);
+    classification = forceRebuild
+      ? await classifyUserMail(userId)
+      : await classifyUserMail(userId, {
+          contactAddresses: [...touchedContactAddresses],
+          threadIds: [...touchedThreadIds],
+        });
   } catch (err) {
     classification = {
       error: err instanceof Error ? err.message : "classify_failed",

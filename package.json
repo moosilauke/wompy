@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "encrypt-tokens": "node scripts/encrypt-tokens.mjs"
+    "encrypt-tokens": "node scripts/encrypt-tokens.mjs",
+    "backfill-from-canonical": "node scripts/backfill-from-canonical.mjs",
+    "backfill-has-replied": "node scripts/backfill-has-replied.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.3",

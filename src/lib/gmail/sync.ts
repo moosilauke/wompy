@@ -15,6 +15,7 @@ import {
   storeReactions,
   type StoredReaction,
 } from "@/lib/email/reaction-store";
+import { canonicalAddress, parseAddress } from "@/lib/email/addresses";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -123,6 +124,8 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     threadsTouched: 0,
     messagesLinked: 0,
     contactsTouched: 0,
+    threadIds: [],
+    contactAddresses: [],
   };
 
   if (rows.length > 0) {
@@ -327,6 +330,14 @@ function mapMessageToRow(
       ? new Date().toISOString()
       : null,
     from_address: headers["from"] ?? null,
+    // Canonicalized bare sender address (dots/+tags normalized), so
+    // classify-run.ts can scope its message read to one contact by an exact
+    // match instead of re-parsing every row's raw From header. Kept alongside
+    // from_address rather than replacing it — from_address is the source of
+    // truth for display and the raw header, this is a derived lookup key.
+    from_canonical: headers["from"]
+      ? canonicalAddress(parseAddress(headers["from"])?.address ?? headers["from"])
+      : null,
     to_addresses: splitAddresses(headers["to"]),
     cc_addresses: splitAddresses(headers["cc"]),
     subject: headers["subject"] ?? null,

@@ -4,6 +4,7 @@ import { serverEnv } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { decryptToken, encryptToken } from "@/lib/crypto";
 import { GMAIL_SCOPES } from "@/lib/email/providers";
+import { GMAIL_RETRY_OPTIONS } from "@/lib/gmail/quota";
 import type { EmailAccount } from "@/lib/types";
 
 /** The OAuth2 client type as produced by `google.auth.OAuth2`. Using this
@@ -91,7 +92,10 @@ export async function fetchGmailAddress(
   const oauth = createOAuthClient();
   oauth.setCredentials(tokens);
   const gmail = google.gmail({ version: "v1", auth: oauth });
-  const profile = await gmail.users.getProfile({ userId: "me" });
+  const profile = await gmail.users.getProfile(
+    { userId: "me" },
+    GMAIL_RETRY_OPTIONS,
+  );
   return profile.data.emailAddress ?? null;
 }
 

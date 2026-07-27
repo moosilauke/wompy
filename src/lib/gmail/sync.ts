@@ -16,6 +16,7 @@ import {
   type StoredReaction,
 } from "@/lib/email/reaction-store";
 import { canonicalAddress, parseAddress } from "@/lib/email/addresses";
+import { GMAIL_RETRY_OPTIONS } from "@/lib/gmail/quota";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -62,12 +63,15 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
   let pageToken: string | undefined;
   do {
     const list: gmail_v1.Schema$ListMessagesResponse = (
-      await gmail.users.messages.list({
-        userId: "me",
-        q: query,
-        maxResults: PAGE_SIZE,
-        pageToken,
-      })
+      await gmail.users.messages.list(
+        {
+          userId: "me",
+          q: query,
+          maxResults: PAGE_SIZE,
+          pageToken,
+        },
+        GMAIL_RETRY_OPTIONS,
+      )
     ).data;
     for (const m of list.messages ?? []) {
       if (m.id) ids.push(m.id);
@@ -88,11 +92,14 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
   const reactions: StoredReaction[] = [];
   for (const id of boundedIds) {
     const full = (
-      await gmail.users.messages.get({
-        userId: "me",
-        id,
-        format: "full",
-      })
+      await gmail.users.messages.get(
+        {
+          userId: "me",
+          id,
+          format: "full",
+        },
+        GMAIL_RETRY_OPTIONS,
+      )
     ).data;
     const row = mapMessageToRow(account, full);
 
@@ -236,11 +243,14 @@ export async function ingestMessageById(
   const gmail = google.gmail({ version: "v1", auth });
 
   const full = (
-    await gmail.users.messages.get({
-      userId: "me",
-      id: gmailMessageId,
-      format: "full",
-    })
+    await gmail.users.messages.get(
+      {
+        userId: "me",
+        id: gmailMessageId,
+        format: "full",
+      },
+      GMAIL_RETRY_OPTIONS,
+    )
   ).data;
 
   const row = mapMessageToRow(account, full);

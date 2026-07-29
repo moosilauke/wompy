@@ -135,22 +135,44 @@ export async function groupMessagesIntoThreads(
   //
   //    has_replied is only ever included as `true`, and only for addresses
   //    actually replied to in this batch — never `false`. It's a one-way flag
-  //    (once you've replied to someone, that never becomes untrue), and
-  //    omitting the key entirely for everyone else means PostgREST's upsert
-  //    leaves their existing value alone on conflict rather than clobbering it
-  //    back to the column default.
-  const contactRows = [...contactNames.entries()].map(([address, name]) => ({
-    user_id: userId,
-    address,
-    display_name: name,
-    ...(repliedToAddresses.has(address) ? { has_replied: true } : {}),
-  }));
-  if (contactRows.length > 0) {
+  //    (once you've replied to someone, that never becomes untrue).
+  //
+  //    Split into two upserts rather than one array with the key present on
+  //    some rows and absent on others: a single batched upsert sends ONE
+  //    INSERT statement for the whole array, and Postgres fills any column
+  //    missing from SOME rows as NULL for those rows — it does not mean "skip
+  //    this column for this row only." Mixing shapes in one call violated
+  //    has_replied's not-null constraint for every row that omitted it.
+  //    Keeping each call's rows uniformly shaped avoids that entirely.
+  const repliedRows = [...contactNames.entries()]
+    .filter(([address]) => repliedToAddresses.has(address))
+    .map(([address, name]) => ({
+      user_id: userId,
+      address,
+      display_name: name,
+      has_replied: true,
+    }));
+  const otherRows = [...contactNames.entries()]
+    .filter(([address]) => !repliedToAddresses.has(address))
+    .map(([address, name]) => ({
+      user_id: userId,
+      address,
+      display_name: name,
+    }));
+
+  if (repliedRows.length > 0) {
     const { error } = await admin
       .from("contacts")
-      .upsert(contactRows, { onConflict: "user_id,address" });
+      .upsert(repliedRows, { onConflict: "user_id,address" });
     if (error) throw error;
   }
+  if (otherRows.length > 0) {
+    const { error } = await admin
+      .from("contacts")
+      .upsert(otherRows, { onConflict: "user_id,address" });
+    if (error) throw error;
+  }
+  const contactRows = [...repliedRows, ...otherRows];
 
   // 3. Upsert threads and collect their ids.
   const threadRows = [...buckets.values()].map((b) => ({

@@ -184,8 +184,10 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
  * Only metadata: Gmail keeps the bytes, and `gmail_attachment_id` fetches them
  * on demand. Failures are swallowed — a missing paperclip is worth far less
  * than the mail itself, so it must never fail a sync.
+ *
+ * Exported for reuse by backfill.ts — identical shape, same idempotent upsert.
  */
-async function storeAttachments(
+export async function storeAttachments(
   userId: string,
   stored: { id: string; gmail_message_id?: string | null }[],
   attachmentsByGmailId: Map<string, ReturnType<typeof extractAttachments>>,
@@ -317,7 +319,8 @@ function searchTextFor(
   return buildExcerpt(source).cleaned || source;
 }
 
-function mapMessageToRow(
+/** Exported for reuse by backfill.ts — same message shape, same mapping. */
+export function mapMessageToRow(
   account: EmailAccount,
   msg: gmail_v1.Schema$Message,
 ) {

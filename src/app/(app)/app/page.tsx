@@ -72,7 +72,17 @@ export default async function AppPage({
   // rail/pane machinery entirely.
   const threadView: ContactTab = isThreadView(activeTab) ? activeTab : "contact";
 
-  // These four queries are independent of each other, so they go out together.
+  // Bounded per-tab page size for the rail's initial load. A tab with more
+  // than this gets a "Load more" control (POST /api/rail/more) rather than
+  // shipping everything — the previous unbounded "all threads" select and
+  // the latest_thread_snippets RPC both silently truncated at PostgREST's
+  // default 1000-row response cap once an account crossed that many threads
+  // (confirmed on a real 1,516-thread backfilled account: mail after a
+  // certain date just vanished from the rail, no error). Three tab-scoped
+  // queries below replace that single unbounded one.
+  const RAIL_PAGE_SIZE = 200;
+
+  // These queries are independent of each other, so they go out together.
   // Run sequentially they cost ~1.3s of round-trips; in parallel, ~0.25s — the
   // page's dominant cost, since every sync ends in router.refresh().
   //
@@ -80,8 +90,12 @@ export default async function AppPage({
   // which thread ends up selected.
   const [
     { data: accounts },
-    { data: recentRows },
-    { data: threadRows },
+    { data: contactThreadRows },
+    { data: companyThreadRows },
+    { data: spamThreadRows },
+    { count: contactTotal },
+    { count: companyTotal },
+    { count: spamTotal },
     { data: contactRows },
     { data: readRows },
     { data: profileRow },
@@ -90,22 +104,45 @@ export default async function AppPage({
   ] = await Promise.all([
     // Connected inbox addresses — used to decide which bubbles are "mine".
     supabase.from("email_accounts").select("email, last_synced_at"),
-    // Latest surviving message per thread — genuinely per-thread (migration
-    // 0025's DISTINCT ON), not a flat top-N across the mailbox. This decides
-    // which threads exist at all: deleting the last message in a conversation
-    // must remove it from the rail rather than leave an empty row, and a
-    // thread whose newest message happens to be old (as historical backfill
-    // produces plenty of) must still show up — a global row cap here
-    // previously excluded exactly those threads once total message volume
-    // grew past it, with no error, since the query was never wrong syntax,
-    // just the wrong shape for "current per thread" as the mailbox scales.
-    supabase.rpc("latest_thread_snippets", { p_user_id: user.sub }),
-    // All threads, newest activity first. Fetched whole so the tab counts are
-    // accurate without a second round-trip.
+    // The rail's initial page, per tab — newest activity first, bounded, with
+    // `id` as a tiebreaker so "Load more" (keyset pagination on
+    // last_message_at + id) has a stable cursor even when several threads
+    // share the same timestamp.
     supabase
       .from("threads")
       .select("id, participant_set, last_message_at, tab")
-      .order("last_message_at", { ascending: false, nullsFirst: false }),
+      .eq("tab", "contact")
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false })
+      .limit(RAIL_PAGE_SIZE),
+    supabase
+      .from("threads")
+      .select("id, participant_set, last_message_at, tab")
+      .eq("tab", "company")
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false })
+      .limit(RAIL_PAGE_SIZE),
+    supabase
+      .from("threads")
+      .select("id, participant_set, last_message_at, tab")
+      .eq("tab", "spam")
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: false })
+      .limit(RAIL_PAGE_SIZE),
+    // True per-tab totals, independent of the page above — badges must never
+    // silently undercount just because only the first page was fetched.
+    supabase
+      .from("threads")
+      .select("id", { count: "exact", head: true })
+      .eq("tab", "contact"),
+    supabase
+      .from("threads")
+      .select("id", { count: "exact", head: true })
+      .eq("tab", "company"),
+    supabase
+      .from("threads")
+      .select("id", { count: "exact", head: true })
+      .eq("tab", "spam"),
     // Display names for participants, gathered during threading.
     supabase.from("contacts").select("address, display_name, tab"),
     // Per-thread read watermarks. Unread is derived by comparing these to each
@@ -127,6 +164,22 @@ export default async function AppPage({
       .select("id", { count: "exact", head: true })
       .not("trashed_at", "is", null),
   ]);
+
+  const threadRows = [
+    ...(contactThreadRows ?? []),
+    ...(companyThreadRows ?? []),
+    ...(spamThreadRows ?? []),
+  ];
+
+  // Snippets only for the specific threads actually being rendered this page
+  // — not the whole mailbox. Skipped entirely when there's nothing to look
+  // up (a brand-new account with zero threads yet).
+  const { data: recentRows } =
+    threadRows.length > 0
+      ? await supabase.rpc("latest_thread_snippets", {
+          p_thread_ids: threadRows.map((t) => t.id),
+        })
+      : { data: [] };
 
   // Canonicalized so `Kevincole@`, `kevin.cole@`, and `kevincole+tag@` all match
   // the connected account.
@@ -190,13 +243,15 @@ export default async function AppPage({
     tab: ContactTab;
   }[]).filter((t) => snippetByThread.has(t.id));
 
-  // Counts are derived from the same filtered list, so a tab badge never
-  // promises conversations the rail won't show. Sent and Trash count messages
-  // rather than threads, since that is what those views list.
+  // Real per-tab totals (contactTotal/companyTotal/spamTotal), not derived
+  // from whatever page happened to be fetched — a badge must reflect the
+  // true count even when the rail itself only holds the first page and the
+  // rest is behind "Load more". Sent and Trash count messages rather than
+  // threads, since that is what those views list.
   const counts: Record<AppView, number> = {
-    contact: allThreads.filter((t) => t.tab === "contact").length,
-    company: allThreads.filter((t) => t.tab === "company").length,
-    spam: allThreads.filter((t) => t.tab === "spam").length,
+    contact: contactTotal ?? 0,
+    company: companyTotal ?? 0,
+    spam: spamTotal ?? 0,
     sent: sentCount ?? 0,
     trash: trashCount ?? 0,
   };
@@ -265,20 +320,55 @@ export default async function AppPage({
     };
   };
 
-  // Rail data for every tab, not just the active one.
-  //
-  // The server already loads all threads on each render (the tab counts need
-  // them), so sending all three lists costs one extra pass over data we hold
-  // anyway — and lets the client switch tabs without a server round-trip.
-  // Previously a tab switch re-fetched identical data just to filter it
-  // differently.
+  // Rail data for every tab, not just the active one — each tab's first page
+  // (RAIL_PAGE_SIZE threads) was already fetched above, so sending all three
+  // lists costs one extra pass over data already in memory, and lets the
+  // client switch tabs without a server round-trip. Previously a tab switch
+  // re-fetched identical data just to filter it differently.
   const threads = allThreads.filter((t) => t.tab === threadView);
 
   // Resolve the selected thread (default: most recent). Done before the rail is
   // built so the open conversation can be excluded from the unread treatment —
   // with no `?thread=`, the first thread is still the one being read.
-  const selected =
+  let selected =
     threads.find((t) => t.id === requestedThreadId) ?? threads[0] ?? null;
+
+  // A requested thread outside the current page (e.g. a bookmarked link to
+  // an older, backfilled conversation past RAIL_PAGE_SIZE) would otherwise
+  // silently fall through to threads[0] above — opening the wrong
+  // conversation with no indication anything was off. Fetched directly by
+  // id (RLS still scopes it to the current user) rather than widening the
+  // page fetch itself, since this is the rare "deep link to something old"
+  // case, not the common path.
+  //
+  // Known minor gap: unreadThreads (below) is only computed for the current
+  // page, so MarkThreadRead won't correctly detect this thread as unread if
+  // it's both out-of-page and genuinely unread — it just won't get
+  // auto-marked-read on this visit. Accepted rather than fetching its
+  // thread_reads watermark too, since the failure mode is harmless (stays
+  // unread a little longer) and the case is already rare.
+  if (requestedThreadId && selected?.id !== requestedThreadId) {
+    const { data: directThread } = await supabase
+      .from("threads")
+      .select("id, participant_set, last_message_at, tab")
+      .eq("id", requestedThreadId)
+      .maybeSingle();
+    if (directThread) {
+      selected = directThread as (typeof allThreads)[number];
+      if (!snippetByThread.has(directThread.id)) {
+        const { data: directSnippet } = await supabase.rpc(
+          "latest_thread_snippets",
+          { p_thread_ids: [directThread.id] },
+        );
+        const row = (directSnippet ?? [])[0] as
+          | { thread_id: string; snippet: string | null }
+          | undefined;
+        if (row) {
+          snippetByThread.set(row.thread_id, normalizeSnippet(row.snippet) ?? "");
+        }
+      }
+    }
+  }
 
   const railByTab: Record<ContactTab, RailThread[]> = {
     contact: allThreads
@@ -477,11 +567,30 @@ export default async function AppPage({
         ? await base.contains("label_ids", ["SENT"]).is("trashed_at", null)
         : await base.not("trashed_at", "is", null);
 
+    // Looked up directly rather than reused from the rail's threadRows —
+    // those are now only the first RAIL_PAGE_SIZE threads per tab, and a
+    // Sent/Trash message can easily belong to a thread outside that page
+    // (e.g. an old conversation the user replied to once, then never
+    // touched again). Scoped to exactly the thread ids these messages
+    // reference, so it stays cheap regardless of total thread count.
+    const listedThreadIds = [
+      ...new Set(
+        ((listRows ?? []) as { thread_id: string | null }[])
+          .map((m) => m.thread_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const { data: listedThreadTabs } =
+      listedThreadIds.length > 0
+        ? await supabase
+            .from("threads")
+            .select("id, tab")
+            .in("id", listedThreadIds)
+        : { data: [] };
     const tabByThread = new Map(
-      ((threadRows ?? []) as { id: string; tab: ContactTab }[]).map((t) => [
-        t.id,
-        t.tab,
-      ]),
+      ((listedThreadTabs ?? []) as { id: string; tab: ContactTab }[]).map(
+        (t) => [t.id, t.tab],
+      ),
     );
 
     listedMessages = ((listRows ?? []) as {

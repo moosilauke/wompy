@@ -4,6 +4,7 @@ import {
   fetchGmailAddress,
   upsertGoogleTokensForUser,
 } from "@/lib/gmail/auth";
+import { seedBackfillJob } from "@/lib/gmail/backfill";
 import { maybeSendWelcome } from "@/lib/email/welcome";
 
 /**
@@ -46,13 +47,22 @@ export async function GET(request: Request) {
         refresh_token: providerRefreshToken ?? null,
       });
       if (email) {
-        await upsertGoogleTokensForUser(user.id, email, {
+        const { accountId } = await upsertGoogleTokensForUser(user.id, email, {
           access_token: providerToken,
           refresh_token: providerRefreshToken ?? null,
           // Supabase doesn't surface the Google token expiry here; leave null so
           // getAuthorizedClient treats it as "refresh on next use".
           expiry_date: null,
         });
+        // Best-effort, same reasoning as the explicit Connect Gmail callback
+        // (src/app/api/auth/gmail/callback/route.ts) — must not block sign-in.
+        if (accountId) {
+          try {
+            await seedBackfillJob(user.id, accountId);
+          } catch {
+            // Swallowed deliberately.
+          }
+        }
       }
     } catch {
       // Gmail scope not granted (or profile fetch failed) → account only, no

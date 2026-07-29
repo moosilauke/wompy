@@ -90,23 +90,16 @@ export default async function AppPage({
   ] = await Promise.all([
     // Connected inbox addresses — used to decide which bubbles are "mine".
     supabase.from("email_accounts").select("email, last_synced_at"),
-    // Latest surviving message per thread. This decides which threads exist at
-    // all: deleting the last message in a conversation must remove it from the
-    // rail rather than leave an empty row. `trashed_at is null` does that.
-    //
-    // `body_text` is deliberately not selected — it was 49KB across these rows
-    // and is only ever used as a snippet fallback, truncated to a preview.
-    // `snippet` alone covers that, and Gmail populates it for every message.
-    supabase
-      .from("messages")
-      .select("thread_id, snippet, internal_date")
-      .not("thread_id", "is", null)
-      .is("trashed_at", null)
-      // Reaction carriers aren't messages: previewing one would make the rail
-      // show a bare emoji as the conversation's latest content.
-      .eq("is_reaction", false)
-      .order("internal_date", { ascending: false })
-      .limit(400),
+    // Latest surviving message per thread — genuinely per-thread (migration
+    // 0025's DISTINCT ON), not a flat top-N across the mailbox. This decides
+    // which threads exist at all: deleting the last message in a conversation
+    // must remove it from the rail rather than leave an empty row, and a
+    // thread whose newest message happens to be old (as historical backfill
+    // produces plenty of) must still show up — a global row cap here
+    // previously excluded exactly those threads once total message volume
+    // grew past it, with no error, since the query was never wrong syntax,
+    // just the wrong shape for "current per thread" as the mailbox scales.
+    supabase.rpc("latest_thread_snippets", { p_user_id: user.sub }),
     // All threads, newest activity first. Fetched whole so the tab counts are
     // accurate without a second round-trip.
     supabase

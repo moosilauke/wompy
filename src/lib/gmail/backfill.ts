@@ -72,6 +72,58 @@ export interface BackfillStepResult {
   threading: ThreadingResult;
 }
 
+/** Default backfill window: 12 months back from connect time. Bounded
+ * deliberately — see HISTORICAL_SYNC_PLAN.md — rather than "everything," so
+ * first-run time is proportional for every user regardless of mailbox size.
+ * Reachable further back later via the Settings "go back further" control
+ * (Phase 5), which just widens this same job's range_after. */
+const DEFAULT_BACKFILL_MONTHS = 12;
+
+/**
+ * Seed a `backfill_jobs` row for a newly connected Gmail account.
+ *
+ * Called from both OAuth callbacks right after the account's tokens are
+ * upserted — before any actual fetching happens. The client-driven
+ * `/api/backfill/step` loop picks up from here; this function only creates
+ * the row, it doesn't fetch anything itself, so it's safe to call from a
+ * redirect-bound callback without blocking on Gmail.
+ *
+ * `range_before` matches syncAccount's own "now" watermark at connect time
+ * (see sync.ts) — mail after that point is regular sync's job, not
+ * backfill's, so the two never re-fetch the same range.
+ *
+ * No-ops (returns without writing) if a job already exists for this account
+ * — reconnecting shouldn't reset progress or silently restart a completed
+ * backfill.
+ */
+export async function seedBackfillJob(
+  userId: string,
+  emailAccountId: string,
+): Promise<void> {
+  const admin = createAdminClient();
+
+  const { data: existing, error: existingError } = await admin
+    .from("backfill_jobs")
+    .select("id")
+    .eq("email_account_id", emailAccountId)
+    .maybeSingle();
+  if (existingError) throw existingError;
+  if (existing) return;
+
+  const rangeBefore = new Date();
+  const rangeAfter = new Date(rangeBefore);
+  rangeAfter.setMonth(rangeAfter.getMonth() - DEFAULT_BACKFILL_MONTHS);
+
+  const { error } = await admin.from("backfill_jobs").insert({
+    user_id: userId,
+    email_account_id: emailAccountId,
+    status: "pending" satisfies BackfillJobStatus,
+    range_after: rangeAfter.toISOString(),
+    range_before: rangeBefore.toISOString(),
+  });
+  if (error) throw error;
+}
+
 /**
  * Process one chunk of a backfill job: list one page, fetch each message body
  * (bounded concurrency), upsert, thread, and persist the job's new cursor.

@@ -63,26 +63,37 @@ export async function upsertGoogleTokensForUser(
   userId: string,
   email: string,
   tokens: GoogleTokens,
-): Promise<{ error: string | null }> {
+): Promise<{ error: string | null; accountId: string | null }> {
   const admin = createAdminClient();
-  const { error } = await admin.from("email_accounts").upsert(
-    {
-      user_id: userId,
-      provider: "gmail",
-      email,
-      // Encrypted at rest: a refresh token grants ongoing access to the whole
-      // mailbox, so the database alone must not be enough to use one.
-      access_token: encryptToken(tokens.access_token),
-      ...(tokens.refresh_token
-        ? { refresh_token: encryptToken(tokens.refresh_token) }
-        : {}),
-      token_expiry: tokens.expiry_date
-        ? new Date(tokens.expiry_date).toISOString()
-        : null,
-    },
-    { onConflict: "user_id,email" },
-  );
-  return { error: error ? error.message : null };
+  const { data, error } = await admin
+    .from("email_accounts")
+    .upsert(
+      {
+        user_id: userId,
+        provider: "gmail",
+        email,
+        // Encrypted at rest: a refresh token grants ongoing access to the
+        // whole mailbox, so the database alone must not be enough to use one.
+        access_token: encryptToken(tokens.access_token),
+        ...(tokens.refresh_token
+          ? { refresh_token: encryptToken(tokens.refresh_token) }
+          : {}),
+        token_expiry: tokens.expiry_date
+          ? new Date(tokens.expiry_date).toISOString()
+          : null,
+      },
+      { onConflict: "user_id,email" },
+    )
+    .select("id")
+    .single();
+  return {
+    error: error ? error.message : null,
+    // Callers use this to seed a backfill_jobs row for the connected
+    // account (see seedBackfillJob in backfill.ts) — null on failure, or if
+    // the select somehow returns nothing, so a caller never gets a
+    // misleadingly-truthy id it can't actually use.
+    accountId: error ? null : ((data as { id: string } | null)?.id ?? null),
+  };
 }
 
 /** Read the Gmail address for a set of Google credentials via the Gmail profile. */

@@ -1,6 +1,7 @@
 "use client";
 
 import { SyncStatus, useSyncPoller } from "./SyncPoller";
+import { BackfillProgress } from "./BackfillProgress";
 import { AccountMenu } from "./AccountMenu";
 import { Search } from "./Search";
 import { MoreMenu } from "./MoreMenu";
@@ -97,6 +98,9 @@ export function TopBar({
         <div className="hidden md:block">
           <Search />
         </div>
+        {/* Backfill progress, when active — deliberately visible, not
+            quiet-by-default like SyncStatus below it. */}
+        <BackfillProgress />
         {/* Only renders when something needs attention. */}
         <SyncStatus lastError={lastError} needsReauth={needsReauth} />
         <AccountMenu

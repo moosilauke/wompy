@@ -175,6 +175,15 @@ export async function groupMessagesIntoThreads(
   const contactRows = [...repliedRows, ...otherRows];
 
   // 3. Upsert threads and collect their ids.
+  //
+  //    Via upsert_threads_monotonic (migration 0024), not a plain upsert:
+  //    historical backfill processes messages in small chunks, older mail
+  //    first, and can touch a participant key whose thread already has newer
+  //    activity from regular sync. A blind INSERT ... ON CONFLICT DO UPDATE
+  //    would let that older chunk overwrite last_message_at backward,
+  //    corrupting the thread's sort position in the rail — the RPC takes
+  //    GREATEST(existing, incoming) instead, so no chunk can ever regress it
+  //    regardless of processing order.
   const threadRows = [...buckets.values()].map((b) => ({
     user_id: userId,
     participant_set: b.participants,
@@ -182,10 +191,10 @@ export async function groupMessagesIntoThreads(
     last_message_at: b.lastMessageAt,
   }));
 
-  const { data: upsertedThreads, error: threadError } = await admin
-    .from("threads")
-    .upsert(threadRows, { onConflict: "user_id,participant_key" })
-    .select("id, participant_key");
+  const { data: upsertedThreads, error: threadError } = await admin.rpc(
+    "upsert_threads_monotonic",
+    { p_rows: threadRows },
+  );
   if (threadError) throw threadError;
 
   const threadIdByKey = new Map<string, string>();

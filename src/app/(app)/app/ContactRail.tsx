@@ -40,6 +40,9 @@ export function ContactRail({
   activeTab,
   contactSuggestions,
   className = "w-[320px] shrink-0",
+  hasMore = false,
+  loadingMore = false,
+  onLoadMore,
 }: {
   threads: RailThread[];
   selectedId: string | null;
@@ -47,6 +50,14 @@ export function ContactRail({
   contactSuggestions: ContactSuggestion[];
   /** Sizing override — the mobile drawer fills its own panel instead of the fixed desktop width. */
   className?: string;
+  /** Whether this tab has more threads beyond what's currently loaded. */
+  hasMore?: boolean;
+  /** Whether a "Load more" request for this tab is in flight. */
+  loadingMore?: boolean;
+  /** Fetches and appends the next page — omitted where the caller doesn't
+   * support pagination (there is currently only one caller, AppShell, which
+   * always provides it; optional so a future bare usage doesn't have to). */
+  onLoadMore?: () => void;
 }) {
   return (
     <aside
@@ -100,6 +111,17 @@ export function ContactRail({
               );
             })}
           </ul>
+        )}
+
+        {hasMore && (
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="mx-1 mt-2 rounded-full border border-coral/50 px-3 py-2 text-center text-[13px] font-bold text-coral transition-colors hover:border-coral hover:bg-coral/10 disabled:opacity-60"
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
         )}
       </nav>
 

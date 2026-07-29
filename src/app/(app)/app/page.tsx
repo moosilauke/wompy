@@ -382,6 +382,26 @@ export default async function AppPage({
       .map(toRailThread),
   };
 
+  // "Load more" cursor per tab, derived from the raw fetched page (not
+  // allThreads, which is further filtered down to threads with visible
+  // content) — the cursor has to reflect exactly where the underlying fetch
+  // left off, regardless of whether every fetched row ended up rendered.
+  // Fewer rows than RAIL_PAGE_SIZE came back means that tab's whole table
+  // was already exhausted — no further page exists, so the cursor is null.
+  const cursorFor = (
+    rows: { id: string; last_message_at: string | null }[] | null,
+  ): { lastMessageAt: string | null; id: string } | null => {
+    const list = rows ?? [];
+    if (list.length < RAIL_PAGE_SIZE) return null;
+    const last = list[list.length - 1];
+    return { lastMessageAt: last.last_message_at, id: last.id };
+  };
+  const initialCursors: Record<ContactTab, { lastMessageAt: string | null; id: string } | null> = {
+    contact: cursorFor(contactThreadRows),
+    company: cursorFor(companyThreadRows),
+    spam: cursorFor(spamThreadRows),
+  };
+
   let paneThread: PaneThread | null = null;
   let paneMessages: PaneMessage[] = [];
   let companyMessages: CompanyMessage[] = [];
@@ -640,6 +660,7 @@ export default async function AppPage({
         initialTab={activeTab}
         counts={counts}
         railByTab={railByTab}
+        initialCursors={initialCursors}
         selectedId={selected?.id ?? null}
         contactSuggestions={contactSuggestions}
       >

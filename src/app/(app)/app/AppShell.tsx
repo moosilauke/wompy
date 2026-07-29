@@ -1,12 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar } from "./TopBar";
 import { ContactRail, type RailThread } from "./ContactRail";
 import { MobileRailDrawer } from "./MobileRailDrawer";
 import type { ContactSuggestion } from "./NewMessage";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
+
+export interface RailCursor {
+  lastMessageAt: string | null;
+  id: string;
+}
 
 /**
  * Client shell owning the active tab.
@@ -28,6 +33,7 @@ export function AppShell({
   initialTab,
   counts,
   railByTab,
+  initialCursors,
   selectedId,
   contactSuggestions,
   children,
@@ -38,6 +44,9 @@ export function AppShell({
   initialTab: AppView;
   counts: Record<AppView, number>;
   railByTab: Record<ContactTab, RailThread[]>;
+  /** Per-tab keyset cursor for "Load more" — null means that tab's first
+   * page was already the whole list (fewer than RAIL_PAGE_SIZE rows). */
+  initialCursors: Record<ContactTab, RailCursor | null>;
   selectedId: string | null;
   contactSuggestions: ContactSuggestion[];
   children: React.ReactNode;
@@ -45,6 +54,54 @@ export function AppShell({
   const router = useRouter();
   const [selectedTab, setSelectedTab] = useState<AppView>(initialTab);
   const [lastServerTab, setLastServerTab] = useState<AppView>(initialTab);
+
+  // Accumulated rail state, seeded from the server's first page per tab and
+  // grown by loadMore. Reseeded whenever the server sends a fresh railByTab
+  // (a real page load/refresh) — see the derive-during-render block below,
+  // same pattern already used for lastServerTab/selectedTab.
+  const [threadsByTab, setThreadsByTab] =
+    useState<Record<ContactTab, RailThread[]>>(railByTab);
+  const [cursorByTab, setCursorByTab] =
+    useState<Record<ContactTab, RailCursor | null>>(initialCursors);
+  const [lastServerRailByTab, setLastServerRailByTab] = useState(railByTab);
+  const [loadingMore, setLoadingMore] = useState<ContactTab | null>(null);
+
+  // A fresh server render (new mail via the sync poller's router.refresh(),
+  // or a real navigation) replaces the accumulated state with the server's
+  // new first page — any "Load more" progress from before this render is
+  // intentionally not preserved across it, matching how a tab switch already
+  // resets to the server's view today. Compared by reference: railByTab is a
+  // new array identity only when page.tsx actually re-ran its queries.
+  if (railByTab !== lastServerRailByTab) {
+    setLastServerRailByTab(railByTab);
+    setThreadsByTab(railByTab);
+    setCursorByTab(initialCursors);
+  }
+
+  const loadMore = useCallback(
+    async (tab: ContactTab) => {
+      const cursor = cursorByTab[tab];
+      if (!cursor || loadingMore) return;
+      setLoadingMore(tab);
+      try {
+        const res = await fetch("/api/rail/more", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tab, cursor }),
+        });
+        if (!res.ok) return;
+        const { threads: more, nextCursor } = (await res.json()) as {
+          threads: RailThread[];
+          nextCursor: RailCursor | null;
+        };
+        setThreadsByTab((prev) => ({ ...prev, [tab]: [...prev[tab], ...more] }));
+        setCursorByTab((prev) => ({ ...prev, [tab]: nextCursor }));
+      } finally {
+        setLoadingMore(null);
+      }
+    },
+    [cursorByTab, loadingMore],
+  );
 
   // Derive during render rather than syncing in an effect: when the server
   // sends a different tab (a back/forward navigation, or the poller's
@@ -96,20 +153,26 @@ export function AppShell({
             {/* Desktop: inline sidebar, as always. */}
             <div className="hidden md:flex">
               <ContactRail
-                threads={railByTab[railTab]}
+                threads={threadsByTab[railTab]}
                 selectedId={selectedId}
                 activeTab={railTab}
                 contactSuggestions={contactSuggestions}
+                hasMore={cursorByTab[railTab] !== null}
+                loadingMore={loadingMore === railTab}
+                onLoadMore={() => loadMore(railTab)}
               />
             </div>
             {/* Mobile: overlay drawer, so the reading pane is the default view. */}
             <MobileRailDrawer>
               <ContactRail
-                threads={railByTab[railTab]}
+                threads={threadsByTab[railTab]}
                 selectedId={selectedId}
                 activeTab={railTab}
                 contactSuggestions={contactSuggestions}
                 className="w-full"
+                hasMore={cursorByTab[railTab] !== null}
+                loadingMore={loadingMore === railTab}
+                onLoadMore={() => loadMore(railTab)}
               />
             </MobileRailDrawer>
           </>

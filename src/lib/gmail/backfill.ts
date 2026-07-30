@@ -183,9 +183,11 @@ export async function backfillAccount(
 
   const afterEpoch = Math.floor(new Date(job.range_after).getTime() / 1000);
   const beforeEpoch = Math.floor(new Date(job.range_before).getTime() / 1000);
-  // Same `in:anywhere` reasoning as syncAccount: Sent/archived mail is needed
-  // for reply-reciprocity and the chat view's outbound bubbles.
-  const query = `in:anywhere after:${afterEpoch} before:${beforeEpoch}`;
+  // Same `in:anywhere`/`-in:drafts` reasoning as syncAccount: Sent/archived
+  // mail is needed for reply-reciprocity and the chat view's outbound
+  // bubbles, but a never-sent draft must never be ingested as a message —
+  // see sync.ts for the real-account case this was found from.
+  const query = `in:anywhere -in:drafts after:${afterEpoch} before:${beforeEpoch}`;
 
   let list: gmail_v1.Schema$ListMessagesResponse;
   try {
@@ -244,6 +246,12 @@ export async function backfillAccount(
             GMAIL_RETRY_OPTIONS,
           )
         ).data;
+
+        // Defensive: `-in:drafts` above should already exclude these, but a
+        // draft was never actually sent to anyone, so it must never be
+        // stored as a message regardless of how it was fetched.
+        if ((full.labelIds ?? []).includes("DRAFT")) continue;
+
         const row = mapMessageToRow(account, full);
 
         const emoji = full.payload ? extractReaction(full.payload) : null;

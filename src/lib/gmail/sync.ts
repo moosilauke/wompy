@@ -56,7 +56,13 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
   // reply-reciprocity rule ("if you ever replied, they're a Contact") can only
   // fire if replies are stored, and the chat view can't show your own side of a
   // conversation without them.
-  const query = `in:anywhere after:${afterEpoch}`;
+  //
+  // `-in:drafts` excludes unsent drafts — a draft was never sent to anyone,
+  // so it has no business appearing as an outgoing chat bubble. Confirmed via
+  // a real account: a stale, never-sent draft reply (label DRAFT) synced in
+  // alongside the actual SENT message for the same reply, rendering as two
+  // bubbles for what was genuinely one send.
+  const query = `in:anywhere -in:drafts after:${afterEpoch}`;
 
   // 1. List message ids matching the query (paginated, capped).
   const ids: string[] = [];
@@ -101,6 +107,13 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
         GMAIL_RETRY_OPTIONS,
       )
     ).data;
+    // Defensive: `-in:drafts` above should already exclude these, but a
+    // draft was never actually sent to anyone, so it must never be stored as
+    // a message regardless of how it was fetched — this guards against the
+    // query filter behaving unexpectedly for some account/locale rather than
+    // relying on it alone.
+    if ((full.labelIds ?? []).includes("DRAFT")) continue;
+
     const row = mapMessageToRow(account, full);
 
     // A reaction is an ordinary email carrying a specially-typed part. Recorded

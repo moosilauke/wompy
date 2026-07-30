@@ -95,3 +95,83 @@ export async function markThreadUnread(
   );
   if (error) throw error;
 }
+
+/**
+ * Mark several threads read, in one round-trip — the rail's multi-select
+ * "Mark as read" action.
+ *
+ * Each thread gets its own watermark row (a thread's `last_message_at` isn't
+ * shared with any other thread), so this is one bulk `select` for all the
+ * thread rows plus one bulk `upsert`, rather than looping `markThreadRead`
+ * per id — same end state, far fewer round-trips for a large selection.
+ */
+export async function markThreadsRead(
+  userId: string,
+  threadIds: string[],
+): Promise<void> {
+  if (threadIds.length === 0) return;
+  const admin = createAdminClient();
+
+  const { data: threads, error: threadsError } = await admin
+    .from("threads")
+    .select("id, last_message_at")
+    .eq("user_id", userId)
+    .in("id", threadIds);
+  if (threadsError) throw threadsError;
+
+  const now = new Date().toISOString();
+  const rows = (threads ?? []).map((t) => {
+    const row = t as { id: string; last_message_at: string | null };
+    return {
+      user_id: userId,
+      thread_id: row.id,
+      last_read_at: row.last_message_at ?? now,
+      updated_at: now,
+    };
+  });
+  if (rows.length === 0) return;
+
+  const { error } = await admin
+    .from("thread_reads")
+    .upsert(rows, { onConflict: "user_id,thread_id" });
+  if (error) throw error;
+}
+
+/**
+ * Mark several threads unread, in one round-trip — the rail's multi-select
+ * "Mark as unread" action. Same one-millisecond-before-latest trick as
+ * `markThreadUnread`, applied per thread in a single bulk upsert.
+ */
+export async function markThreadsUnread(
+  userId: string,
+  threadIds: string[],
+): Promise<void> {
+  if (threadIds.length === 0) return;
+  const admin = createAdminClient();
+
+  const { data: threads, error: threadsError } = await admin
+    .from("threads")
+    .select("id, last_message_at")
+    .eq("user_id", userId)
+    .in("id", threadIds);
+  if (threadsError) throw threadsError;
+
+  const now = new Date().toISOString();
+  const rows = (threads ?? [])
+    .map((t) => t as { id: string; last_message_at: string | null })
+    .filter((row) => row.last_message_at !== null)
+    .map((row) => ({
+      user_id: userId,
+      thread_id: row.id,
+      last_read_at: new Date(
+        new Date(row.last_message_at as string).getTime() - 1,
+      ).toISOString(),
+      updated_at: now,
+    }));
+  if (rows.length === 0) return;
+
+  const { error } = await admin
+    .from("thread_reads")
+    .upsert(rows, { onConflict: "user_id,thread_id" });
+  if (error) throw error;
+}

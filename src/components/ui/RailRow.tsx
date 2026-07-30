@@ -15,6 +15,7 @@ export function RailRow({
   snippet,
   unread = false,
   active = false,
+  selected = false,
   extraParticipants = 0,
   logoUrl = null,
 }: {
@@ -24,6 +25,10 @@ export function RailRow({
   snippet: string;
   unread?: boolean;
   active?: boolean;
+  /** Part of a multi-select (ctrl/shift-click), independent of `active` — a
+   * row can be both the currently-open thread AND part of a selection, so
+   * this needs its own distinct treatment rather than reusing `active`'s. */
+  selected?: boolean;
   /** "+2" suffix for group conversations. */
   extraParticipants?: number;
   logoUrl?: string | null;
@@ -31,9 +36,11 @@ export function RailRow({
   return (
     <span
       className={`flex items-center gap-[11px] rounded-xl p-2.5 transition-colors ${
-        active
-          ? "bg-[oklch(0.8_0.13_175_/_0.25)]"
-          : "hover:bg-white/[0.06]"
+        active ? "bg-[oklch(0.8_0.13_175_/_0.25)]" : "hover:bg-white/[0.06]"
+      } ${
+        selected
+          ? "bg-coral/20 shadow-[inset_3px_0_0_0_var(--coral)]"
+          : ""
       }`}
     >
       <Avatar address={address} label={label} size={44} logoUrl={logoUrl} />

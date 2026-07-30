@@ -6,6 +6,7 @@ import type { ContactTab } from "@/lib/types";
 import { NewMessageButton } from "./NewMessageButton";
 import type { ContactSuggestion } from "./NewMessage";
 import { ThreadRowMenu } from "./ThreadRowMenu";
+import { ThreadSelectionMenu } from "./ThreadSelectionMenu";
 
 export interface RailThread {
   id: string;
@@ -28,6 +29,10 @@ export interface RailThread {
   logoUrl: string | null;
 }
 
+/** Stable empty-Set default so an unselected rail doesn't get a new Set
+ * identity (and thus a wasted re-render) every time its parent re-renders. */
+const EMPTY_SELECTION = new Set<string>();
+
 /**
  * Left contact rail — dark spruce, full height, flush against the top bar.
  *
@@ -43,6 +48,9 @@ export function ContactRail({
   hasMore = false,
   loadingMore = false,
   onLoadMore,
+  selectedIds = EMPTY_SELECTION,
+  onRowClick,
+  onSelectionDone,
 }: {
   threads: RailThread[];
   selectedId: string | null;
@@ -58,6 +66,16 @@ export function ContactRail({
    * support pagination (there is currently only one caller, AppShell, which
    * always provides it; optional so a future bare usage doesn't have to). */
   onLoadMore?: () => void;
+  /** Ctrl/shift-selected thread ids for this tab (see useThreadSelection).
+   * Optional so a future bare usage without multi-select doesn't have to
+   * wire anything up. */
+  selectedIds?: Set<string>;
+  /** Intercepts a row's click to handle ctrl/shift-select; returns whether the
+   * click was consumed as a selection toggle (navigation should be
+   * suppressed) rather than a normal open. */
+  onRowClick?: (threadId: string, e: React.MouseEvent) => boolean;
+  /** Clears the selection once a bulk action from the right-click menu fires. */
+  onSelectionDone?: () => void;
 }) {
   return (
     <aside
@@ -82,31 +100,56 @@ export function ContactRail({
           <ul className="flex flex-col gap-0.5">
             {threads.map((thread) => {
               const active = thread.id === selectedId;
+              const selected = selectedIds.has(thread.id);
+              const row = (
+                <Link
+                  href={`/app?tab=${activeTab}&thread=${thread.id}`}
+                  aria-current={active ? "true" : undefined}
+                  className="block"
+                  onClick={(e) => {
+                    if (onRowClick?.(thread.id, e)) e.preventDefault();
+                  }}
+                >
+                  <RailRow
+                    address={thread.primaryAddress}
+                    label={thread.label}
+                    timestamp={railTimestamp(thread.lastMessageAt)}
+                    snippet={thread.snippet}
+                    unread={thread.unread}
+                    active={active}
+                    selected={selected}
+                    extraParticipants={thread.extraParticipants}
+                    logoUrl={thread.logoUrl}
+                  />
+                </Link>
+              );
               return (
                 <li key={thread.id}>
-                  <ThreadRowMenu
-                    threadId={thread.id}
-                    label={thread.label}
-                    unread={thread.unread}
-                    currentTab={activeTab}
-                  >
-                  <Link
-                    href={`/app?tab=${activeTab}&thread=${thread.id}`}
-                    aria-current={active ? "true" : undefined}
-                    className="block"
-                  >
-                    <RailRow
-                      address={thread.primaryAddress}
+                  {/* Right-clicking a row that's part of a 2+ selection acts
+                      on the whole selection; otherwise (no selection, or a
+                      right-click outside it) it's the normal single-thread
+                      menu — matches Finder/Gmail's convention that a
+                      right-click outside the current selection replaces it
+                      rather than adding to it. */}
+                  {selectedIds.size > 1 && selected ? (
+                    <ThreadSelectionMenu
+                      threads={threads.filter((t) => selectedIds.has(t.id))}
+                      currentTab={activeTab}
+                      onDone={() => onSelectionDone?.()}
+                    >
+                      {row}
+                    </ThreadSelectionMenu>
+                  ) : (
+                    <ThreadRowMenu
+                      threadId={thread.id}
                       label={thread.label}
-                      timestamp={railTimestamp(thread.lastMessageAt)}
-                      snippet={thread.snippet}
                       unread={thread.unread}
-                      active={active}
-                      extraParticipants={thread.extraParticipants}
-                      logoUrl={thread.logoUrl}
-                    />
-                  </Link>
-                  </ThreadRowMenu>
+                      currentTab={activeTab}
+                      onOpen={selectedIds.size > 0 ? onSelectionDone : undefined}
+                    >
+                      {row}
+                    </ThreadRowMenu>
+                  )}
                 </li>
               );
             })}

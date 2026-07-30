@@ -7,8 +7,13 @@ import {
   trashMessages,
   untrashMessages,
 } from "@/lib/gmail/actions";
-import { reclassifyThread } from "@/lib/email/reclassify";
-import { markThreadRead, markThreadUnread } from "@/lib/email/read-state";
+import { reclassifyThreads } from "@/lib/email/reclassify";
+import {
+  markThreadRead,
+  markThreadUnread,
+  markThreadsRead,
+  markThreadsUnread,
+} from "@/lib/email/read-state";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -21,9 +26,13 @@ import type { EmailAccount } from "@/lib/types";
  * Body:
  *   { action: "trash" | "untrash" | "read" | "unread",
  *     threadId?: string,      // act on the whole conversation
+ *     threadIds?: string[],   // or several, from the rail's multi-select
  *     messageIds?: string[] } // or specific messages
  *
- *   { action: "reclassify", threadId, tab }
+ *   { action: "reclassify", threadId?: string, threadIds?: string[], tab }
+ *
+ * threadId and threadIds are never both meaningful at once — threadIds wins
+ * when present, so callers don't need to special-case a single-element array.
  */
 
 const SUPPORTED = new Set([
@@ -53,6 +62,7 @@ export async function POST(request: Request) {
   let payload: {
     action?: string;
     threadId?: string;
+    threadIds?: string[];
     messageIds?: string[];
     tab?: string;
   };
@@ -67,18 +77,30 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unsupported_action" }, { status: 400 });
   }
 
+  // threadIds (the rail's multi-select) wins over a single threadId when both
+  // are somehow present, and a lone threadId is normalized into a one-element
+  // array — every handler below only ever deals with a list.
+  const threadIds =
+    payload.threadIds && payload.threadIds.length > 0
+      ? payload.threadIds
+      : payload.threadId
+        ? [payload.threadId]
+        : [];
+
   // Read/unread are Wompy-native now (a per-thread watermark in Supabase), so
   // they touch no mail and need no Gmail account. Handled before the account
   // lookup, like reclassify.
   if (action === "read" || action === "unread") {
-    if (!payload.threadId) {
+    if (threadIds.length === 0) {
       return NextResponse.json({ error: "no_target" }, { status: 400 });
     }
     try {
       if (action === "read") {
-        await markThreadRead(userId, payload.threadId);
+        if (threadIds.length === 1) await markThreadRead(userId, threadIds[0]);
+        else await markThreadsRead(userId, threadIds);
       } else {
-        await markThreadUnread(userId, payload.threadId);
+        if (threadIds.length === 1) await markThreadUnread(userId, threadIds[0]);
+        else await markThreadsUnread(userId, threadIds);
       }
       return NextResponse.json({ ok: true, action });
     } catch (err) {
@@ -99,12 +121,12 @@ export async function POST(request: Request) {
     if (tab !== "contact" && tab !== "company" && tab !== "spam") {
       return NextResponse.json({ error: "invalid_tab" }, { status: 400 });
     }
-    if (!payload.threadId) {
+    if (threadIds.length === 0) {
       return NextResponse.json({ error: "no_target" }, { status: 400 });
     }
 
     try {
-      const result = await reclassifyThread(userId, payload.threadId, tab);
+      const result = await reclassifyThreads(userId, threadIds, tab);
       return NextResponse.json({ ok: true, action, ...result });
     } catch (err) {
       return NextResponse.json(
@@ -134,13 +156,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "no_account" }, { status: 400 });
   }
 
-  // Resolve the target: an explicit message list, or every message in a thread.
-  // Remaining actions (trash / untrash) operate on messages.
+  // Resolve the target: an explicit message list, or every message across the
+  // given thread(s) — one or several, from a single conversation or the
+  // rail's multi-select. Remaining actions (trash / untrash) operate on
+  // messages, flattened across every thread since batchModify doesn't care
+  // which thread a message came from.
   let targetIds: string[] = [];
   if (payload.messageIds && payload.messageIds.length > 0) {
     targetIds = payload.messageIds;
-  } else if (payload.threadId) {
-    targetIds = await messageIdsInThread(userId, payload.threadId);
+  } else if (threadIds.length > 0) {
+    const perThread = await Promise.all(
+      threadIds.map((id) => messageIdsInThread(userId, id)),
+    );
+    targetIds = perThread.flat();
   }
 
   if (targetIds.length === 0) {

@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useToasts } from "./Toasts";
 import { useOptimisticReactions } from "./OptimisticReactions";
+import { useRailMutations } from "./RailMutations";
 import type { ContactTab } from "@/lib/types";
 
 /**
@@ -16,6 +17,7 @@ export function useMessageActions() {
   const router = useRouter();
   const { notify } = useToasts();
   const { addPending, clearPending } = useOptimisticReactions();
+  const { removeThreads, patchThreads } = useRailMutations();
 
   const run = useCallback(
     async (body: Record<string, unknown>) => {
@@ -33,14 +35,20 @@ export function useMessageActions() {
     [],
   );
 
-  /** Trash a whole conversation or specific messages, with an Undo toast. */
+  /** Trash one or more conversations, or specific messages, with an Undo toast. */
   const trash = useCallback(
     async (
-      target: { threadId?: string; messageIds?: string[] },
+      target: { threadId?: string; threadIds?: string[]; messageIds?: string[] },
       description: string,
     ) => {
       try {
         const { messageIds } = await run({ action: "trash", ...target });
+        // Only a whole-thread trash removes the rail row — trashing a
+        // specific message (messageIds, no threadId(s)) can leave the rest of
+        // the conversation intact, so the thread itself isn't gone.
+        const trashedThreadIds =
+          target.threadIds ?? (target.threadId ? [target.threadId] : []);
+        removeThreads(trashedThreadIds);
         router.refresh();
 
         notify(`${description} moved to Trash`, async () => {
@@ -55,7 +63,7 @@ export function useMessageActions() {
         notify(err instanceof Error ? err.message : "Couldn’t delete");
       }
     },
-    [run, router, notify],
+    [run, router, notify, removeThreads],
   );
 
   /**
@@ -65,9 +73,20 @@ export function useMessageActions() {
    * menu, so a toast would be noise.
    */
   const setRead = useCallback(
-    async (target: { threadId?: string; messageIds?: string[] }, read: boolean) => {
+    async (
+      target: { threadId?: string; threadIds?: string[]; messageIds?: string[] },
+      read: boolean,
+    ) => {
       try {
         await run({ action: read ? "read" : "unread", ...target });
+        // Applied immediately rather than left to the router.refresh() below:
+        // a thread only reachable via "Load more" is outside the server's
+        // fresh first page, so a background refresh alone would never touch
+        // its row again — this is what actually flips the rail's unread
+        // treatment for it (see RailMutations.tsx).
+        const affectedThreadIds =
+          target.threadIds ?? (target.threadId ? [target.threadId] : []);
+        patchThreads(affectedThreadIds, { unread: !read });
         router.refresh();
       } catch (err) {
         notify(
@@ -77,27 +96,40 @@ export function useMessageActions() {
         );
       }
     },
-    [run, router, notify],
+    [run, router, notify, patchThreads],
   );
 
   /**
-   * Move a conversation to another tab.
+   * Move one or more conversations to another tab.
    *
    * The toast confirms it rather than offering undo: the change is recorded
    * against the sender and persists across syncs, so "undo" would mean a second
    * override rather than a revert. Moving it back is the same two clicks.
    */
   const reclassify = useCallback(
-    async (threadId: string, tab: ContactTab, description: string) => {
+    async (
+      target: { threadId: string } | { threadIds: string[] },
+      tab: ContactTab,
+      description: string,
+    ) => {
       try {
-        await run({ action: "reclassify", threadId, tab });
+        await run({ action: "reclassify", ...target, tab });
+        // Remove from every tab's rail immediately — reclassify can also move
+        // OTHER threads sharing the same contact (see reclassifyThreads), not
+        // just the one(s) explicitly targeted, so a background refresh alone
+        // could leave a now-stale row sitting in its old tab. The correct
+        // set (including the newly-moved thread(s), in their new tab) comes
+        // back in via the fresh payload the router.refresh() below triggers.
+        const movedThreadIds =
+          "threadIds" in target ? target.threadIds : [target.threadId];
+        removeThreads(movedThreadIds);
         router.refresh();
         notify(`${description} moved to ${TAB_LABELS[tab]}`);
       } catch (err) {
         notify(err instanceof Error ? err.message : "Couldn’t move it");
       }
     },
-    [run, router, notify],
+    [run, router, notify, removeThreads],
   );
 
   /**

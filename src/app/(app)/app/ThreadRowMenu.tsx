@@ -21,6 +21,7 @@ export function ThreadRowMenu({
   label,
   unread,
   currentTab,
+  onOpen,
   children,
 }: {
   threadId: string;
@@ -29,6 +30,11 @@ export function ThreadRowMenu({
   unread: boolean;
   /** Tab this conversation is in, so it isn't offered as a destination. */
   currentTab: ContactTab;
+  /** Fires when this row's menu opens — the rail uses this to clear any
+   * active multi-selection, since right-clicking a row outside it should
+   * replace the selection rather than leave other rows looking selected
+   * underneath a single-thread menu. */
+  onOpen?: () => void;
   children: React.ReactNode;
 }) {
   const { position, open, close } = useContextMenu();
@@ -48,7 +54,7 @@ export function ThreadRowMenu({
       id: `move-${t.tab}`,
       label: t.label,
       onSelect: () =>
-        void reclassify(threadId, t.tab, `Conversation with ${label}`),
+        void reclassify({ threadId }, t.tab, `Conversation with ${label}`),
     })),
     {
       id: "trash",
@@ -59,7 +65,12 @@ export function ThreadRowMenu({
   ];
 
   return (
-    <div onContextMenu={open}>
+    <div
+      onContextMenu={(e) => {
+        onOpen?.();
+        open(e);
+      }}
+    >
       {children}
       <ContextMenu position={position} actions={actions} onClose={close} />
     </div>

@@ -36,19 +36,42 @@ export async function reclassifyThread(
   threadId: string,
   tab: ContactTab,
 ): Promise<ReclassifyResult> {
-  const admin = createAdminClient();
+  return reclassifyThreads(userId, [threadId], tab);
+}
 
-  const { data: thread, error: threadError } = await admin
+/**
+ * Move several conversations — and everyone in them — to `tab`, in one pass.
+ *
+ * Built for the rail's multi-select "Move to…" action. Rather than looping
+ * `reclassifyThread` per selected thread (each call would separately
+ * recompute tabs for every OTHER thread its participants appear in — wasted,
+ * repeated work once more than one thread is involved), this gathers every
+ * participant across all the selected threads up front and re-derives once.
+ */
+export async function reclassifyThreads(
+  userId: string,
+  threadIds: string[],
+  tab: ContactTab,
+): Promise<ReclassifyResult> {
+  const admin = createAdminClient();
+  if (threadIds.length === 0) {
+    return { contactsUpdated: 0, threadsUpdated: 0 };
+  }
+
+  const { data: threads, error: threadError } = await admin
     .from("threads")
     .select("id, participant_set")
-    .eq("id", threadId)
     .eq("user_id", userId)
-    .maybeSingle();
+    .in("id", threadIds);
   if (threadError) throw threadError;
-  if (!thread) throw new Error("Conversation not found.");
+  if (!threads || threads.length === 0) {
+    throw new Error("Conversation not found.");
+  }
 
-  const participants =
-    (thread as { participant_set: string[] }).participant_set ?? [];
+  const participants = new Set<string>();
+  for (const t of threads as { participant_set: string[] }[]) {
+    for (const address of t.participant_set ?? []) participants.add(address);
+  }
 
   const { data: accounts } = await admin
     .from("email_accounts")
@@ -58,7 +81,7 @@ export async function reclassifyThread(
     (accounts ?? []).map((a) => canonicalAddress((a as { email: string }).email)),
   );
 
-  const targets = participants.filter(
+  const targets = [...participants].filter(
     (address) => !selfAddresses.has(canonicalAddress(address)),
   );
   if (targets.length === 0) {
@@ -83,10 +106,10 @@ export async function reclassifyThread(
     .select("id");
   if (contactError) throw contactError;
 
-  // Re-derive tabs for every thread these people appear in, not just this one.
-  // A sender moved to Companies should leave the chat view everywhere, and the
-  // alternative — waiting for the next sync — would make the change look like
-  // it silently failed.
+  // Re-derive tabs for every thread these people appear in, not just the
+  // selected ones. A sender moved to Companies should leave the chat view
+  // everywhere, and the alternative — waiting for the next sync — would make
+  // the change look like it silently failed.
   const threadsUpdated = await rederiveThreadsFor(userId, targets);
 
   return {

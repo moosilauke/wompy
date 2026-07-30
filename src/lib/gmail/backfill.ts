@@ -38,14 +38,16 @@ import type { EmailAccount } from "@/lib/types";
  * repeatedly by the client until the job reports `complete`.
  */
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 // Fetched with bounded concurrency, not sequentially — Gmail has no batch
 // fetch for message bodies (unlike batchModify), so throughput has to come
-// from a small worker pool instead. Conservative relative to Gmail's ~250
-// units/sec per-user quota (messages.get = 5 units, so 50/sec is the
-// theoretical ceiling); this stays well under it even with sync/other
-// concurrent activity on the same account.
-const FETCH_CONCURRENCY = 5;
+// from a small worker pool instead. 10 concurrent messages.get calls (5
+// units each) is 50 units/sec, comfortably under Gmail's ~250 units/sec
+// per-user quota even with sync/other concurrent activity on the same
+// account. Doubled from the original 25/5 (which felt slow on a 37k+ message
+// real mailbox) — still a safe margin under the ~10s default serverless
+// timeout this endpoint has no override for.
+const FETCH_CONCURRENCY = 10;
 
 export type BackfillJobStatus = "pending" | "running" | "complete" | "failed";
 
@@ -187,7 +189,13 @@ export async function backfillAccount(
   // mail is needed for reply-reciprocity and the chat view's outbound
   // bubbles, but a never-sent draft must never be ingested as a message —
   // see sync.ts for the real-account case this was found from.
-  const query = `in:anywhere -in:drafts after:${afterEpoch} before:${beforeEpoch}`;
+  //
+  // `-in:spam` differs from syncAccount deliberately: ongoing sync keeps spam
+  // so a live misclassification is still visible, but backfill is about
+  // catching up on history, where stale spam has no value — it's been sitting
+  // there for months/years unread by definition, and skipping it shrinks the
+  // fetch volume for large mailboxes.
+  const query = `in:anywhere -in:drafts -in:spam after:${afterEpoch} before:${beforeEpoch}`;
 
   let list: gmail_v1.Schema$ListMessagesResponse;
   try {
@@ -214,7 +222,9 @@ export async function backfillAccount(
     throw err;
   }
 
-  const ids = (list.messages ?? []).map((m) => m.id).filter((id): id is string => Boolean(id));
+  const listedIds = (list.messages ?? [])
+    .map((m) => m.id)
+    .filter((id): id is string => Boolean(id));
   const nextPageToken = list.nextPageToken ?? null;
   // resultSizeEstimate is a rough, approximate count Gmail computes per
   // request — captured once from the job's first chunk and held steady
@@ -222,6 +232,20 @@ export async function backfillAccount(
   // like it's moving backward as later pages recompute their own estimate.
   const messagesEstimated =
     job.messages_estimated ?? list.resultSizeEstimate ?? null;
+
+  // Skip the expensive messages.get + parse path entirely for ids already in
+  // the table — cheap to check (one indexed query) versus a full fetch. This
+  // matters most when a job's page_token gets reset and re-walks a window
+  // that's already partly stored (e.g. after a query change mid-job): without
+  // this, every already-stored message still costs a full messages.get call
+  // even though it can never produce anything new.
+  const { data: existing } = await admin
+    .from("messages")
+    .select("gmail_message_id")
+    .eq("email_account_id", account.id)
+    .in("gmail_message_id", listedIds);
+  const alreadyStored = new Set((existing ?? []).map((r) => r.gmail_message_id));
+  const ids = listedIds.filter((id) => !alreadyStored.has(id));
 
   // Fetch full message bodies with bounded concurrency rather than
   // syncAccount's sequential loop — this is the throughput difference that
@@ -288,9 +312,16 @@ export async function backfillAccount(
     Array.from({ length: Math.min(FETCH_CONCURRENCY, ids.length) }, worker),
   );
 
-  let upserted = 0;
+  let newlyStored = 0;
   let threading: ThreadingResult = emptyThreading;
   if (rows.length > 0) {
+    // `ids` was already filtered to exclude anything in `messages` for this
+    // account (see above), so everything reaching this upsert is expected to
+    // be genuinely new — rows.length is the correct messages_done delta.
+    // (Upsert's own `.select()` can't be used for this count: Postgres's ON
+    // CONFLICT...RETURNING returns a row for every input regardless of
+    // whether it inserted or updated, which is what caused progress to run
+    // to ~4x the real stored count before this existence check existed.)
     const { data: stored, error } = await admin
       .from("messages")
       .upsert(rows, { onConflict: "email_account_id,gmail_message_id" })
@@ -308,7 +339,7 @@ export async function backfillAccount(
       });
       throw error;
     }
-    upserted = stored?.length ?? rows.length;
+    newlyStored = rows.length;
 
     await storeAttachments(account.user_id, stored ?? [], attachmentsByGmailId);
     if (reactions.length > 0) await storeReactions(account.user_id, reactions);
@@ -323,7 +354,7 @@ export async function backfillAccount(
 
   const done = nextPageToken === null;
 
-  // messages_done = messages_done + upserted, computed in SQL rather than
+  // messages_done = messages_done + newlyStored, computed in SQL rather than
   // read-then-write in JS — this is what actually closes the race the
   // claim above only narrows: even if this were somehow called twice for
   // the same job, the increment itself can't be lost.
@@ -331,7 +362,7 @@ export async function backfillAccount(
     "increment_backfill_progress",
     {
       p_job_id: job.id,
-      p_messages_done_delta: upserted,
+      p_messages_done_delta: newlyStored,
       p_page_token: nextPageToken,
       p_messages_estimated: messagesEstimated,
       p_status: (done ? "complete" : "pending") satisfies BackfillJobStatus,
@@ -346,13 +377,13 @@ export async function backfillAccount(
 
   const newMessagesDone =
     (updated?.[0] as { messages_done: number } | undefined)?.messages_done ??
-    job.messages_done + upserted;
+    job.messages_done + newlyStored;
 
   return {
     status: done ? "complete" : "pending",
     messagesDone: newMessagesDone,
     messagesEstimated,
-    fetchedThisStep: upserted,
+    fetchedThisStep: newlyStored,
     threading,
   };
 }

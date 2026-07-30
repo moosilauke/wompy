@@ -17,11 +17,15 @@ import type { EmailAccount } from "@/lib/types";
  * work (one Gmail list page, see backfill.ts) so it comfortably fits inside a
  * normal serverless request instead of needing a long-running process.
  *
- * Processes ONE account's job per call (the oldest not-yet-complete one, by
- * `updated_at`) rather than every account at once — keeps each call's latency
- * predictable regardless of how many mailboxes a user has connected.
+ * Processes ONE account's job per call — by default the oldest
+ * not-yet-complete one across every connected account (by `updated_at`),
+ * which is what the top bar's single global indicator wants. An optional
+ * `accountId` in the request body scopes it to one specific account instead
+ * — needed by Settings, which shows independent per-account progress rows:
+ * without this, N simultaneous per-row pollers would all fight over the same
+ * global "oldest job" and misattribute progress to the wrong row.
  */
-export async function POST() {
+export async function POST(request: Request) {
   if (!isSupabaseConfigured) {
     return NextResponse.json({ error: "not_configured" }, { status: 400 });
   }
@@ -33,13 +37,27 @@ export async function POST() {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  let requestedAccountId: string | undefined;
+  try {
+    const body = await request.json();
+    if (typeof body?.accountId === "string") requestedAccountId = body.accountId;
+  } catch {
+    // No body (or invalid JSON) is fine — defaults to the global "oldest
+    // job" behavior, matching every call this route received before
+    // accountId scoping existed.
+  }
+
   const admin = createAdminClient();
 
-  const { data: jobs, error: jobsError } = await admin
+  let jobsQuery = admin
     .from("backfill_jobs")
     .select("*")
     .eq("user_id", userId)
-    .in("status", ["pending", "running"])
+    .in("status", ["pending", "running"]);
+  if (requestedAccountId) {
+    jobsQuery = jobsQuery.eq("email_account_id", requestedAccountId);
+  }
+  const { data: jobs, error: jobsError } = await jobsQuery
     .order("updated_at", { ascending: true })
     .limit(1);
   if (jobsError) {

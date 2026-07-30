@@ -4,7 +4,17 @@ import { isSupabaseConfigured } from "@/lib/env";
 import { currentUserIsAdmin } from "@/lib/admin/guard";
 import { lastSyncedLabel } from "@/lib/format";
 import { PageShell } from "@/components/chrome/PageShell";
+import { SettingsBackfillStatus } from "./SettingsBackfillStatus";
 import type { EmailAccount } from "@/lib/types";
+import type { BackfillJobStatus } from "@/lib/gmail/backfill";
+
+export interface BackfillJobSummary {
+  status: BackfillJobStatus;
+  rangeAfter: string;
+  messagesDone: number;
+  messagesEstimated: number | null;
+  lastError: string | null;
+}
 
 /**
  * Settings: account-level configuration, distinct from the mail view.
@@ -38,6 +48,40 @@ export default async function SettingsPage() {
     "id" | "provider" | "email" | "last_synced_at"
   >[];
 
+  // Backfill status per account — a separate query rather than a join, since
+  // not every account has a row yet (pre-historical-sync-vintage accounts,
+  // or a seed that failed silently per its own best-effort design).
+  const accountIds = connected.map((a) => a.id);
+  const { data: jobRows } =
+    accountIds.length > 0
+      ? await supabase
+          .from("backfill_jobs")
+          .select(
+            "email_account_id, status, range_after, messages_done, messages_estimated, last_error",
+          )
+          .in("email_account_id", accountIds)
+      : { data: [] };
+
+  const jobByAccountId = new Map<string, BackfillJobSummary>(
+    ((jobRows ?? []) as {
+      email_account_id: string;
+      status: BackfillJobStatus;
+      range_after: string;
+      messages_done: number;
+      messages_estimated: number | null;
+      last_error: string | null;
+    }[]).map((j) => [
+      j.email_account_id,
+      {
+        status: j.status,
+        rangeAfter: j.range_after,
+        messagesDone: j.messages_done,
+        messagesEstimated: j.messages_estimated,
+        lastError: j.last_error,
+      },
+    ]),
+  );
+
   return (
     <PageShell
       userEmail={userEmail}
@@ -64,25 +108,32 @@ export default async function SettingsPage() {
             {connected.map((account, i) => (
               <div
                 key={account.id}
-                className={`flex items-center justify-between gap-4 px-4 py-3.5 ${
-                  i > 0 ? "border-t border-black/[0.06]" : ""
-                }`}
+                className={`px-4 py-3.5 ${i > 0 ? "border-t border-black/[0.06]" : ""}`}
               >
-                <div className="min-w-0">
-                  <p className="truncate text-[14px] font-bold text-text-body">
-                    {account.email}
-                  </p>
-                  <p className="text-[12.5px] text-text-muted-2">
-                    {providerLabel(account.provider)} ·{" "}
-                    {lastSyncedLabel(account.last_synced_at)}
-                  </p>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="truncate text-[14px] font-bold text-text-body">
+                      {account.email}
+                    </p>
+                    <p className="text-[12.5px] text-text-muted-2">
+                      {providerLabel(account.provider)} ·{" "}
+                      {lastSyncedLabel(account.last_synced_at)}
+                    </p>
+                  </div>
+                  <a
+                    href="/api/auth/gmail/start"
+                    className="shrink-0 rounded-full border border-black/10 px-3.5 py-1.5 text-[12.5px] font-bold text-text-body transition-colors hover:bg-black/[0.04]"
+                  >
+                    Reconnect
+                  </a>
                 </div>
-                <a
-                  href="/api/auth/gmail/start"
-                  className="shrink-0 rounded-full border border-black/10 px-3.5 py-1.5 text-[12.5px] font-bold text-text-body transition-colors hover:bg-black/[0.04]"
-                >
-                  Reconnect
-                </a>
+
+                {jobByAccountId.has(account.id) && (
+                  <SettingsBackfillStatus
+                    accountId={account.id}
+                    initialJob={jobByAccountId.get(account.id)!}
+                  />
+                )}
               </div>
             ))}
           </div>

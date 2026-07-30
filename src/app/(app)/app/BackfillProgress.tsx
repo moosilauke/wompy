@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 
-const STEP_INTERVAL_MS = 1500;
+const DEFAULT_STEP_INTERVAL_MS = 1500;
 
 /**
  * Drives historical-sync backfill by calling POST /api/backfill/step
@@ -19,15 +20,27 @@ const STEP_INTERVAL_MS = 1500;
  * Stops polling entirely once the server reports `done: true` (every
  * account's job is complete or none exist) — this hook then has nothing left
  * to do for the rest of the session, so it doesn't need to re-check later.
+ *
+ * Exported so the Settings page can run its own independent instance (on a
+ * slower interval — Settings is a page someone glances at, not stares at)
+ * rather than sharing state with the top bar's poller. Two lightweight polls
+ * of a cheap endpoint is a small, acceptable cost, and keeps each component
+ * self-contained instead of introducing this app's first shared-state/context
+ * plumbing for a minor efficiency gain.
  */
-function useBackfillProgress() {
+export function useBackfillProgress(
+  pollIntervalMs: number = DEFAULT_STEP_INTERVAL_MS,
+  /** Scopes polling to one specific account's job. Omit for the top bar's
+   * single global indicator (oldest job across every connected account);
+   * Settings passes each row's own account id, since independent per-row
+   * pollers would otherwise all fight over the same global "oldest job" and
+   * misattribute progress to the wrong row. */
+  accountId?: string,
+) {
   const router = useRouter();
   const inFlight = useRef(false);
   const [active, setActive] = useState(true);
   const [messagesDone, setMessagesDone] = useState<number | null>(null);
-  const [messagesEstimated, setMessagesEstimated] = useState<number | null>(
-    null,
-  );
   const [error, setError] = useState<string | null>(null);
   const [needsReauth, setNeedsReauth] = useState(false);
 
@@ -37,7 +50,11 @@ function useBackfillProgress() {
 
     inFlight.current = true;
     try {
-      const res = await fetch("/api/backfill/step", { method: "POST" });
+      const res = await fetch("/api/backfill/step", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(accountId ? { accountId } : {}),
+      });
       const body = await res.json().catch(() => ({}));
 
       if (!res.ok) {
@@ -59,7 +76,6 @@ function useBackfillProgress() {
 
       setError(null);
       setMessagesDone(body.messagesDone ?? null);
-      setMessagesEstimated(body.messagesEstimated ?? null);
 
       // New mail appears in the rail as it's imported, same as SyncPoller —
       // this is what makes the inbox visibly fill in during backfill rather
@@ -76,7 +92,7 @@ function useBackfillProgress() {
     } finally {
       inFlight.current = false;
     }
-  }, [router]);
+  }, [router, accountId]);
 
   useEffect(() => {
     if (!active) return;
@@ -86,14 +102,19 @@ function useBackfillProgress() {
     // rather than called directly, so the effect body itself only ever
     // schedules work on external timers, matching setInterval below.
     const immediate = setTimeout(runStep, 0);
-    const id = setInterval(runStep, STEP_INTERVAL_MS);
+    const id = setInterval(runStep, pollIntervalMs);
     return () => {
       clearTimeout(immediate);
       clearInterval(id);
     };
-  }, [active, runStep]);
+  }, [active, runStep, pollIntervalMs]);
 
-  return { active, messagesDone, messagesEstimated, error, needsReauth };
+  return {
+    active,
+    messagesDone,
+    error,
+    needsReauth,
+  };
 }
 
 /**
@@ -107,8 +128,7 @@ function useBackfillProgress() {
  * "100%" or shows up for an account that was never mid-backfill.
  */
 export function BackfillProgress() {
-  const { active, messagesDone, messagesEstimated, error, needsReauth } =
-    useBackfillProgress();
+  const { active, messagesDone, error, needsReauth } = useBackfillProgress();
 
   if (!active) return null;
 
@@ -131,21 +151,20 @@ export function BackfillProgress() {
     );
   }
 
-  // Gmail's resultSizeEstimate (captured once, from the first chunk — see
-  // backfill.ts) is a rough approximation, not a real count, and can turn out
-  // lower than the actual total. Once real progress passes it, showing "of
-  // ~N" reads as broken rather than approximate, so the comparison is
-  // dropped in favor of just the running count.
+  // Gmail's resultSizeEstimate (see backfill.ts) is a rough approximation of
+  // the query's match count, not a reliable total — it can land too high or
+  // too low, so it's not shown at all, just the running count.
   const label =
     messagesDone === null
       ? "Importing your mail…"
-      : messagesEstimated && messagesDone <= messagesEstimated
-        ? `Importing your mail… (${messagesDone.toLocaleString()} of ~${messagesEstimated.toLocaleString()})`
-        : `Importing your mail… (${messagesDone.toLocaleString()})`;
+      : `Importing your mail… (${messagesDone.toLocaleString()})`;
 
   return (
-    <span className="text-[13px] font-bold text-on-spruce-muted">
-      {label}
-    </span>
+    <div className="flex w-[180px] flex-col gap-1">
+      <ProgressBar trackClassName="bg-white/15" fillClassName="bg-mint" />
+      <span className="truncate text-[12px] font-bold text-on-spruce-muted">
+        {label}
+      </span>
+    </div>
   );
 }

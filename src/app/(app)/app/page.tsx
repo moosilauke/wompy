@@ -22,7 +22,12 @@ import { MessageListPane, type ListedMessage } from "./MessageListPane";
 import { ToastProvider } from "./Toasts";
 import { OptimisticReactionsProvider } from "./OptimisticReactions";
 import { MarkThreadRead } from "./MarkThreadRead";
-import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
+import {
+  isThreadView,
+  type AppView,
+  type ContactTab,
+  type TabCountMode,
+} from "@/lib/types";
 import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
 import type { ReactionSummary } from "@/components/ui/ReactionBadges";
 
@@ -93,9 +98,9 @@ export default async function AppPage({
     { data: contactThreadRows },
     { data: companyThreadRows },
     { data: spamThreadRows },
-    { count: contactTotal },
-    { count: companyTotal },
-    { count: spamTotal },
+    { data: contactCountsRow },
+    { data: companyCountsRow },
+    { data: spamCountsRow },
     { data: contactRows },
     { data: readRows },
     { data: profileRow },
@@ -129,29 +134,24 @@ export default async function AppPage({
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .order("id", { ascending: false })
       .limit(RAIL_PAGE_SIZE),
-    // True per-tab totals, independent of the page above — badges must never
+    // True per-tab counts, independent of the page above — badges must never
     // silently undercount just because only the first page was fetched.
-    supabase
-      .from("threads")
-      .select("id", { count: "exact", head: true })
-      .eq("tab", "contact"),
-    supabase
-      .from("threads")
-      .select("id", { count: "exact", head: true })
-      .eq("tab", "company"),
-    supabase
-      .from("threads")
-      .select("id", { count: "exact", head: true })
-      .eq("tab", "spam"),
+    // tab_counts() computes all four variants (threads/messages/unread
+    // threads/unread messages) in one query; which field actually gets
+    // displayed depends on the user's tab_count_mode preference below.
+    supabase.rpc("tab_counts", { p_tab: "contact" }).maybeSingle(),
+    supabase.rpc("tab_counts", { p_tab: "company" }).maybeSingle(),
+    supabase.rpc("tab_counts", { p_tab: "spam" }).maybeSingle(),
     // Display names for participants, gathered during threading.
     supabase.from("contacts").select("address, display_name, tab"),
     // Per-thread read watermarks. Unread is derived by comparing these to each
     // thread's last_message_at — no Gmail round-trip, and it follows the user
     // across devices.
     supabase.from("thread_reads").select("thread_id, last_read_at"),
-    // The user's own profile — only to decide whether the Admin menu item
-    // exists. RLS lets them read their own row; the panel itself re-verifies.
-    supabase.from("profiles").select("is_admin").maybeSingle(),
+    // The user's own profile — decides whether the Admin menu item exists,
+    // and which tab_count_mode drives the badges below. RLS lets them read
+    // their own row; the admin panel itself re-verifies is_admin separately.
+    supabase.from("profiles").select("is_admin, tab_count_mode").maybeSingle(),
     // Counts only — head:true skips returning the rows themselves, since these
     // just drive the badges in the More menu.
     supabase
@@ -243,15 +243,26 @@ export default async function AppPage({
     tab: ContactTab;
   }[]).filter((t) => snippetByThread.has(t.id));
 
-  // Real per-tab totals (contactTotal/companyTotal/spamTotal), not derived
-  // from whatever page happened to be fetched — a badge must reflect the
-  // true count even when the rail itself only holds the first page and the
-  // rest is behind "Load more". Sent and Trash count messages rather than
-  // threads, since that is what those views list.
+  // Real per-tab counts, not derived from whatever page happened to be
+  // fetched — a badge must reflect the true count even when the rail itself
+  // only holds the first page and the rest is behind "Load more". Sent and
+  // Trash always count messages, since that is what those flat-list views
+  // show and "unread"/"threads" don't map onto them; Contacts/Companies/Spam
+  // follow the user's tab_count_mode preference instead.
+  const tabCountMode: TabCountMode =
+    (profileRow as { tab_count_mode: TabCountMode } | null)?.tab_count_mode ??
+    "unread_messages";
+  type TabCountsRow = {
+    threads: number;
+    messages: number;
+    unread_threads: number;
+    unread_messages: number;
+  };
+  const countFor = (row: TabCountsRow | null | undefined) => row?.[tabCountMode] ?? 0;
   const counts: Record<AppView, number> = {
-    contact: contactTotal ?? 0,
-    company: companyTotal ?? 0,
-    spam: spamTotal ?? 0,
+    contact: countFor(contactCountsRow as TabCountsRow | null),
+    company: countFor(companyCountsRow as TabCountsRow | null),
+    spam: countFor(spamCountsRow as TabCountsRow | null),
     sent: sentCount ?? 0,
     trash: trashCount ?? 0,
   };

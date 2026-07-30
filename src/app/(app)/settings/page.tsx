@@ -5,7 +5,8 @@ import { currentUserIsAdmin } from "@/lib/admin/guard";
 import { lastSyncedLabel } from "@/lib/format";
 import { PageShell } from "@/components/chrome/PageShell";
 import { SettingsBackfillStatus } from "./SettingsBackfillStatus";
-import type { EmailAccount } from "@/lib/types";
+import { TabCountModePicker } from "./TabCountModePicker";
+import { type EmailAccount, type TabCountMode } from "@/lib/types";
 import type { BackfillJobStatus } from "@/lib/gmail/backfill";
 
 export interface BackfillJobSummary {
@@ -19,10 +20,9 @@ export interface BackfillJobSummary {
 /**
  * Settings: account-level configuration, distinct from the mail view.
  *
- * Starts with connected mailboxes (the one thing that actually needs
- * configuring today) plus a Preferences section reserved for Wompy-specific
- * settings that don't exist yet — kept visible-but-empty rather than omitted,
- * so the page's eventual shape is obvious as those land.
+ * Connected mailboxes, plus a Preferences section for Wompy-specific
+ * settings — currently just the tab counter mode, the first of what's
+ * expected to grow into a longer list over time.
  */
 export const dynamic = "force-dynamic";
 
@@ -35,13 +35,18 @@ export default async function SettingsPage() {
   if (!user) redirect("/login");
   const userEmail = typeof user.email === "string" ? user.email : null;
 
-  const [{ data: accounts }, isAdmin] = await Promise.all([
+  const [{ data: accounts }, isAdmin, { data: profileRow }] = await Promise.all([
     supabase
       .from("email_accounts")
       .select("id, provider, email, last_synced_at")
       .order("created_at", { ascending: true }),
     currentUserIsAdmin(),
+    supabase.from("profiles").select("tab_count_mode").maybeSingle(),
   ]);
+
+  const tabCountMode: TabCountMode =
+    (profileRow as { tab_count_mode: TabCountMode } | null)?.tab_count_mode ??
+    "unread_messages";
 
   const connected = (accounts ?? []) as Pick<
     EmailAccount,
@@ -151,10 +156,13 @@ export default async function SettingsPage() {
             Preferences
           </h2>
           <div className="rounded-[14px] border border-black/[0.06] bg-white px-4 py-4">
-            <p className="text-sm text-text-muted">
-              Wompy-specific preferences are coming here — notification
-              behavior, default views, and the like.
+            <p className="mb-3 text-[14px] font-bold text-text-body">
+              Tab counter
             </p>
+            <p className="mb-3 text-[12.5px] text-text-muted-2">
+              What the number next to Contacts, Companies, and Spam shows.
+            </p>
+            <TabCountModePicker initialMode={tabCountMode} />
           </div>
         </section>
       </div>

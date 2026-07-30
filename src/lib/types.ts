@@ -22,6 +22,33 @@ export function isThreadView(view: AppView): view is ContactTab {
   return view === "contact" || view === "company" || view === "spam";
 }
 
+/**
+ * What the Contacts/Companies/Spam tab badges count. Matches the
+ * `tab_count_mode` enum in the DB (see migration 0027) and the `tab_counts()`
+ * RPC's four output columns. Only applies to the three thread-based tabs —
+ * Sent/Trash are flat message lists with no "unread" concept, and always show
+ * a plain message count regardless of this preference.
+ */
+export type TabCountMode =
+  | "threads"
+  | "messages"
+  | "unread_threads"
+  | "unread_messages";
+
+export const TAB_COUNT_MODES: readonly TabCountMode[] = [
+  "threads",
+  "messages",
+  "unread_threads",
+  "unread_messages",
+];
+
+export const TAB_COUNT_MODE_LABELS: Record<TabCountMode, string> = {
+  threads: "Number of threads",
+  messages: "Number of messages",
+  unread_threads: "Number of unread threads",
+  unread_messages: "Number of unread messages",
+};
+
 export interface ThreadRow {
   id: string;
   user_id: string;

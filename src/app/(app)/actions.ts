@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { TAB_COUNT_MODES, type TabCountMode } from "@/lib/types";
 
 /**
  * Sign the current user out and return home with the auth modal open, so
@@ -80,4 +81,36 @@ export async function extendBackfillRange(formData: FormData) {
     .eq("id", job.id);
 
   revalidatePath("/settings");
+}
+
+/**
+ * Set the Contacts/Companies/Spam tab badges' counter mode (Settings ›
+ * Preferences). Written via the admin client because `profiles` has no
+ * authenticated-write RLS policy — every write goes through the service role
+ * so a user can never touch `is_admin` on their own row (see migration
+ * 0016) — so the same route is reused here rather than opening a new policy
+ * just for this one column.
+ */
+export async function updateTabCountMode(formData: FormData) {
+  const mode = formData.get("mode");
+  if (
+    typeof mode !== "string" ||
+    !TAB_COUNT_MODES.includes(mode as TabCountMode)
+  ) {
+    return;
+  }
+
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (typeof userId !== "string") return;
+
+  const admin = createAdminClient();
+  await admin
+    .from("profiles")
+    .update({ tab_count_mode: mode })
+    .eq("id", userId);
+
+  revalidatePath("/settings");
+  revalidatePath("/app");
 }

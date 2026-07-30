@@ -3,7 +3,7 @@
 Working status and build order. Update this as things ship; it is the shared
 source of truth so decisions don't live only in chat history or a plan file.
 
-Last updated: 2026-07-24
+Last updated: 2026-07-30
 
 ---
 
@@ -15,11 +15,22 @@ Last updated: 2026-07-24
 - Gmail OAuth, token capture and refresh
 
 **Mail pipeline**
-- Raw sync into `messages` (polling, no backfill — starts at connect time)
+- Raw sync into `messages` (polling)
 - Participant-set threading: a thread is everyone on the message except you
 - Gmail alias canonicalization (dots, `+tags`)
-- Classifier, rules 0–6 (see `src/lib/email/classifier.ts`)
+- Classifier, rules 0–6 (see `src/lib/email/classifier.ts`), scoped to
+  changed contacts/threads per sync rather than a full-mailbox rescan
 - Sent-mail sync, so reply-reciprocity and outgoing bubbles work
+- **Historical sync** — new accounts backfill the last 12 months automatically,
+  chunked and resumable via client-driven polling (no job queue/background-function
+  infra needed). Settings shows live progress per account and a "go back
+  further" control (1 more year / 5 more years / all mail) once the initial
+  window completes. Verified against a real 37,400+ message mailbox. Backfill
+  excludes spam (stale spam has no value and only slows a large catch-up down);
+  ongoing sync still includes it so a live misclassification stays visible.
+  Gmail 429s/5xx now retry with backoff on every read call (list + get), for
+  both regular sync and backfill. See `HISTORICAL_SYNC_PLAN.md` for the full
+  design record.
 
 **UI**
 - App shell: contact rail + reading pane, chat bubbles, day dividers
@@ -104,24 +115,12 @@ Being live (even unmarketed) changes what "urgent" means — anyone could sign
 up today, so gaps that were invisible in local dev are now real risk, not
 future risk.
 
-### 1. Historical sync
-Upon sign-up, users don't see any of their old mail — only what arrives after
-they connect. This is a trust-breaker on first impression: someone connects
-Gmail expecting their inbox and sees nothing. Needs careful design (see
-Backlog note) rather than a quick fix, and is the highest-priority gap now
-that real signups are possible.
-
-### 2. Rate limits / API failure handling
-Nothing currently handles Gmail 429s or a failed token refresh beyond the
-reauth case. Was "invisible with one user, routine with fifty" — with the app
-live, that threshold is no longer hypothetical.
-
-### 3. Key rotation path
+### 1. Key rotation path
 Tokens are encrypted, but there's no way to re-key without every user
 reconnecting. The `v1:` envelope prefix was designed for this — a rotation
 script would decrypt with the old key and re-encrypt with the new one. Still
-cheaper to build before there are many rows, but behind the two above now
-that the row count could start growing at any time.
+cheaper to build before there are many rows, and the row count could start
+growing at any time now that the app is live.
 
 ---
 
@@ -163,7 +162,6 @@ that the row count could start growing at any time.
 From the MVP plan, still holding:
 
 - **No AI features** of any kind — brand stance, not a placeholder
-- **No history backfill** — sync starts when you connect
 - **No Gmail push/Pub-Sub** — polling only
 - No per-sender learned signature detection (delimiter and heuristic only)
 - No tracking-pixel-vs-photo image classification

@@ -69,16 +69,37 @@ const SIG_DELIMITER = /^\s*--\s*$/;
 /**
  * Lines that look like signature content rather than prose: a phone number, a
  * bare URL or email, a social handle, or a legal disclaimer opener.
+ *
+ * Deliberately excludes mail-client auto-signatures (see
+ * MAIL_CLIENT_SIGNATURE_LINE below) — those are unambiguous alone, unlike a
+ * phone number or bare URL, which could plausibly be a real closing line on
+ * its own and so still require a second corroborating signal.
  */
 const SIG_LINE_PATTERNS: RegExp[] = [
   /^\s*[*_]*\(?\+?\d[\d\s().-]{7,}[*_]*\s*$/, // phone numbers
   /^\s*[*_]*(https?:\/\/|www\.)\S+[*_]*\s*$/i, // bare URL
   /^\s*[*_]*[\w.+-]+@[\w.-]+\.\w{2,}[*_]*\s*$/i, // bare email address
   /^\s*[*_]*(tel|phone|mobile|cell|fax|office|direct)[:.]?\s*\+?[\d\s().-]{7,}/i,
-  /^\s*[*_]*(sent from my|get outlook for|this e?-?mail (and any attachments? )?(is|are) confidential)/i,
+  /^\s*[*_]*this e?-?mail (and any attachments? )?(is|are) confidential/i,
   /^\s*[*_]*(linkedin|twitter|x\.com|facebook|instagram)[:.]?\s*\S*\s*$/i,
   /^\s*[*_]*click here\b/i,
 ];
+
+/**
+ * A mail client's auto-appended "sent from my phone" line — "Sent from my
+ * iPhone/iPad/Android/Samsung Galaxy", "Get Outlook for iOS/Android", "Sent
+ * from Yahoo Mail", and similar. Unlike SIG_LINE_PATTERNS above, a single
+ * match here is enough to cut on its own (see stripSignature): these phrases
+ * are never legitimate prose, whereas a lone trailing phone number or URL
+ * could plausibly be real content someone meant to include.
+ *
+ * Some mail clients (observed: Outlook mobile) render the line's link with no
+ * separating whitespace before the URL — e.g. "Get Outlook for
+ * iOS<https://aka.ms/...>" — so the match only anchors the phrase itself and
+ * doesn't require a word boundary or space before what follows.
+ */
+const MAIL_CLIENT_SIGNATURE_LINE =
+  /^\s*[*_]*(sent from (my\s+)?(iphone|ipad|android|samsung(\s+galaxy)?|yahoo\s*mail|outlook|mobile)|get outlook for\s*(ios|android)?)\b/i;
 
 /**
  * Job-title / company-line shape: short, title-cased or emphasised, no sentence
@@ -169,6 +190,13 @@ function stripSignature(body: string): { text: string; removed: boolean } {
 
   let cut = lines.length;
   let strongHits = 0;
+  // Set the moment a mail-client auto-signature line ("Sent from my iPhone",
+  // "Get Outlook for iOS", ...) is seen — unlike SIG_LINE_PATTERNS, one such
+  // line is unambiguous enough to cut alone, bypassing the two-signal
+  // requirement below. Still participates in the normal strongHits-driven
+  // continuation scan (title/name lines above it), it just also unlocks the
+  // single-signal cut on its own.
+  let hasUnambiguousSignal = false;
   // Counted in non-blank lines: signature blocks are often double-spaced, so a
   // raw line budget would run out before reaching the top of the block.
   let contentScanned = 0;
@@ -186,6 +214,14 @@ function stripSignature(body: string): { text: string; removed: boolean } {
       continue; // blank lines are common inside signature blocks
     }
     contentScanned += 1;
+
+    if (MAIL_CLIENT_SIGNATURE_LINE.test(line)) {
+      hasUnambiguousSignal = true;
+      strongHits += 1;
+      cut = i;
+      misses = 0;
+      continue;
+    }
 
     if (SIG_LINE_PATTERNS.some((p) => p.test(line))) {
       strongHits += 1;
@@ -217,9 +253,12 @@ function stripSignature(body: string): { text: string; removed: boolean } {
     if (misses > 2) break;
   }
 
-  // Require two independent signals, so one trailing URL or phone number
-  // doesn't swallow a real closing line.
-  if (strongHits >= 2 && cut < lines.length) {
+  // Normally requires two independent signals, so one trailing URL or phone
+  // number doesn't swallow a real closing line. A mail-client auto-signature
+  // ("Sent from my iPhone", "Get Outlook for iOS") is the one exception:
+  // those phrases are never legitimate prose on their own, so a single match
+  // is enough to cut.
+  if ((strongHits >= 2 || hasUnambiguousSignal) && cut < lines.length) {
     return { text: lines.slice(0, cut).join("\n"), removed: true };
   }
 

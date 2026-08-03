@@ -9,8 +9,8 @@ import { useThreadSelection } from "./useThreadSelection";
 import { useMediaQuery, MD_BREAKPOINT } from "./useMediaQuery";
 import { RailMutationsProvider, type RemovedThread } from "./RailMutations";
 import { ThreadPane } from "./ThreadPane";
-import type { PaneMessage, PaneThread } from "./ReadingPane";
-import type { CompanyMessage } from "./CompanyPane";
+import type { PaneThread } from "./ReadingPane";
+import type { MappedMessage } from "@/lib/email/pane";
 import type { ContactSuggestion } from "./NewMessage";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 
@@ -71,6 +71,7 @@ export function AppShell({
   contactSuggestions,
   serverThread,
   serverMessages,
+  serverOlderCursor,
   children,
 }: {
   userEmail: string | null;
@@ -87,7 +88,12 @@ export function AppShell({
   /** The conversation the server rendered, for the cold-load and deep-link
    * path. Once the user clicks a row, the client's choice takes over. */
   serverThread: PaneThread | null;
-  serverMessages: PaneMessage[] | CompanyMessage[];
+  /** The loader's superset shape, which satisfies both panes — see
+   * lib/email/pane.ts. Kept wide here so nothing needs casting on the way
+   * down. */
+  serverMessages: MappedMessage[];
+  /** Set when the server-rendered conversation has more history than one page. */
+  serverOlderCursor: string | null;
   /** Sent/Trash only — thread views render their pane internally. */
   children: React.ReactNode;
 }) {
@@ -424,6 +430,7 @@ export function AppShell({
                 tab={railTab}
                 serverThread={serverThread}
                 serverMessages={serverMessages}
+                serverOlderCursor={serverOlderCursor}
                 openThread={liveOpenThread}
                 isSpam={railTab === "spam"}
               />

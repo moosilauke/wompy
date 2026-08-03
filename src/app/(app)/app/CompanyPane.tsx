@@ -42,6 +42,10 @@ export function CompanyPane({
   messages,
   isSpam = false,
   loading = false,
+  hasOlder = false,
+  loadingOlder = false,
+  olderCount = 0,
+  onLoadOlder,
 }: {
   thread: CompanyThread | null;
   messages: CompanyMessage[];
@@ -49,6 +53,11 @@ export function CompanyPane({
   /** Messages still in flight for a sender whose header is already known —
    * see ReadingPane, same arrangement. */
   loading?: boolean;
+  /** More history exists than what's loaded — see ReadingPane. */
+  hasOlder?: boolean;
+  loadingOlder?: boolean;
+  olderCount?: number;
+  onLoadOlder?: () => void;
 }) {
   if (!thread) {
     return (
@@ -88,6 +97,7 @@ export function CompanyPane({
       <ScrollToLatest
         threadId={thread.id}
         messageCount={messages.length}
+        olderCount={olderCount}
         className="flex-1 overflow-y-auto px-4 py-4 md:px-7 md:py-6"
       >
         {isSpam && (
@@ -97,6 +107,21 @@ export function CompanyPane({
             Contacts on the next sync.
           </p>
         )}
+        {/* Walks back through senders with more history than one page — see
+            ReadingPane; the query has always been capped. */}
+        {hasOlder && (
+          <div className="mb-3 flex justify-center">
+            <button
+              type="button"
+              onClick={onLoadOlder}
+              disabled={loadingOlder}
+              className="rounded-full border border-black/[0.08] bg-white px-3.5 py-1.5 text-[12.5px] font-semibold text-text-muted shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:text-text-body disabled:opacity-50"
+            >
+              {loadingOlder ? "Loading…" : "Load earlier messages"}
+            </button>
+          </div>
+        )}
+
         {messages.length === 0 ? (
           <p className="text-center text-sm text-text-muted">
             Nothing from this sender yet.

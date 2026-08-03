@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { PaneMessage } from "./ReadingPane";
+import type { MappedMessage } from "@/lib/email/pane";
 
 /**
  * Messages the user just sent, before the server has them.
@@ -212,9 +212,9 @@ export function usePendingMessages(): PendingMessagesValue {
  * "thanks") doesn't make the second one disappear into the first.
  */
 export function mergePendingMessages(
-  serverMessages: PaneMessage[],
+  serverMessages: MappedMessage[],
   pending: PendingMessage[] | undefined,
-): PaneMessage[] {
+): MappedMessage[] {
   if (!pending || pending.length === 0) return serverMessages;
 
   const serverGmailIds = new Set(
@@ -231,9 +231,11 @@ export function mergePendingMessages(
   return [
     ...serverMessages,
     ...stillPending.map(
-      (p): PaneMessage => ({
+      (p): MappedMessage => ({
         id: p.tempId,
+        gmailMessageId: p.gmailMessageId ?? null,
         outgoing: true,
+        subject: null,
         body: p.body,
         fullBody: p.body,
         truncated: false,

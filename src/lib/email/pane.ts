@@ -25,8 +25,10 @@ import type { ReactionSummary } from "@/components/ui/ReactionBadges";
 /** Newest N kept, since a conversation is read from its most recent end. */
 export const PANE_MESSAGE_LIMIT = 200;
 
-/** Shape both panes share; the two views pick different fields off it. */
-interface MappedMessage {
+/** Shape both panes share; the two views pick different fields off it. It is
+ * deliberately a superset of PaneMessage and CompanyMessage, so one loader can
+ * serve the chat view and the list view without either being cast. */
+export interface MappedMessage {
   id: string;
   /** Lets an optimistic bubble recognize its own message when it lands. */
   gmailMessageId: string | null;
@@ -39,6 +41,10 @@ interface MappedMessage {
   attachments: AttachmentInfo[];
   reactions: ReactionSummary[];
   sentAt: string | null;
+  /** Never set by the loader — only by the client, on a message it tried to
+   * send and couldn't. Declared here so an optimistic bubble and a stored
+   * message are the same shape. */
+  failedToSend?: string;
 }
 
 interface MessageRow {
@@ -52,22 +58,57 @@ interface MessageRow {
 }
 
 /**
- * Fetch and map every message of a thread, ready for either pane.
+ * A page of messages plus what's needed to ask for the one before it.
+ */
+export interface PaneMessagePage {
+  messages: MappedMessage[];
+  /** Position of the oldest loaded message — pass back as `before` to page
+   * further into the conversation's history. Null when the thread's start has
+   * been reached.
+   *
+   * Composite `<iso>|<id>` rather than a bare timestamp: messages within a
+   * thread DO share timestamps (41 such groups in the test mailbox, up to 4
+   * messages each), and a timestamp-only cursor using strict `<` would
+   * silently skip the rest of a group straddling a page boundary — the same
+   * kind of invisible message loss this pagination exists to fix. */
+  olderCursor: string | null;
+}
+
+/** Split a composite cursor back into its parts. Tolerates a bare timestamp
+ * so a cursor issued before the id was added still pages sensibly. */
+function parseCursor(
+  cursor: string,
+): { internalDate: string; id: string | null } {
+  const sep = cursor.lastIndexOf("|");
+  if (sep === -1) return { internalDate: cursor, id: null };
+  return {
+    internalDate: cursor.slice(0, sep),
+    id: cursor.slice(sep + 1),
+  };
+}
+
+/**
+ * Fetch and map a page of a thread's messages, ready for either pane.
  *
  * `selfAddresses` must already be canonicalized — it decides which bubbles
  * render as outgoing, and the caller has it to hand from the account list.
+ *
+ * `before` walks backwards through a long conversation. Without it the newest
+ * PANE_MESSAGE_LIMIT are returned; a thread with more than that used to simply
+ * lose the rest, with nothing in the UI to say so.
  */
 export async function loadPaneMessages(
   supabase: SupabaseClient,
   threadId: string,
   selfAddresses: Set<string>,
-): Promise<MappedMessage[]> {
+  before?: string | null,
+): Promise<PaneMessagePage> {
   // body_html is deliberately NOT selected here. It's ~91% of the bytes in a
   // thread and is only needed for messages with no body_text (~28% of the
   // corpus) — selecting it unconditionally meant fetching hundreds of MB
   // across a mailbox purely to throw it away. The rows that actually need it
   // are fetched separately below.
-  const { data: messageRows } = await supabase
+  let query = supabase
     .from("messages")
     .select(
       "id, gmail_message_id, from_address, subject, body_text, snippet, internal_date",
@@ -75,15 +116,41 @@ export async function loadPaneMessages(
     .eq("thread_id", threadId)
     .is("trashed_at", null)
     // Reactions render as badges on their target, not as their own bubbles.
-    .eq("is_reaction", false)
+    .eq("is_reaction", false);
+
+  // Strictly before the oldest already on screen, in (internal_date, id)
+  // order. Keyset rather than offset, matching the rail's pagination: new mail
+  // arriving mid-read shifts an offset and would duplicate or skip messages.
+  // The id half of the comparison is what makes messages sharing a timestamp
+  // page correctly instead of being skipped as a group.
+  if (before) {
+    const { internalDate, id } = parseCursor(before);
+    query = id
+      ? query.or(
+          `internal_date.lt.${internalDate},and(internal_date.eq.${internalDate},id.lt.${id})`,
+        )
+      : query.lt("internal_date", internalDate);
+  }
+
+  const { data: messageRows } = await query
     // Fetched newest-first so the limit keeps the most RECENT messages, then
     // reversed below for display. Ordering ascending here would silently take
-    // the oldest N of a long conversation.
+    // the oldest N of a long conversation. `id` breaks timestamp ties so the
+    // ordering is total and the cursor names an exact position.
     .order("internal_date", { ascending: false })
+    .order("id", { ascending: false })
     .limit(PANE_MESSAGE_LIMIT);
 
   const rows = (messageRows ?? []) as MessageRow[];
-  if (rows.length === 0) return [];
+  if (rows.length === 0) return { messages: [], olderCursor: null };
+
+  // A full page means there may be more behind it. A short one means this is
+  // the start of the conversation.
+  const oldest = rows[rows.length - 1];
+  const olderCursor =
+    rows.length === PANE_MESSAGE_LIMIT && oldest.internal_date
+      ? `${oldest.internal_date}|${oldest.id}`
+      : null;
 
   const messageIds = rows.map((m) => m.id);
   // Only the messages that have no plain-text body need their HTML pulled.
@@ -158,7 +225,7 @@ export async function loadPaneMessages(
   // Chronological for display: oldest first, newest at the bottom. Both views
   // read the same way — a conversation runs down the page, and the most recent
   // message is where you land.
-  return rows.reverse().map((m) => {
+  const messages = rows.reverse().map((m) => {
     const from = parseAddress(m.from_address);
     const bodyHtml = m.body_text ? null : (htmlById.get(m.id) ?? null);
     // HTML-only mail is converted to text rather than sanitized and injected:
@@ -191,4 +258,6 @@ export async function loadPaneMessages(
       sentAt: m.internal_date,
     };
   });
+
+  return { messages, olderCursor };
 }

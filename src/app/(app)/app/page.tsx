@@ -7,13 +7,12 @@ import {
   parseAddress,
 } from "@/lib/email/addresses";
 import { normalizeSnippet } from "@/lib/email/text";
-import { loadPaneMessages } from "@/lib/email/pane";
+import { loadPaneMessages, type MappedMessage } from "@/lib/email/pane";
 import { canReactTo } from "@/lib/email/reactions";
 import { brandLogoUrl, logoDomainFor } from "@/lib/email/logos";
 import { AppShell } from "./AppShell";
 import { type RailThread } from "./ContactRail";
-import { type PaneMessage, type PaneThread } from "./ReadingPane";
-import { type CompanyMessage } from "./CompanyPane";
+import { type PaneThread } from "./ReadingPane";
 import { MessageListPane, type ListedMessage } from "./MessageListPane";
 import { ToastProvider } from "./Toasts";
 import { OptimisticReactionsProvider } from "./OptimisticReactions";
@@ -414,8 +413,13 @@ export default async function AppPage({
   };
 
   let paneThread: PaneThread | null = null;
-  let paneMessages: PaneMessage[] = [];
-  let companyMessages: CompanyMessage[] = [];
+  // One list, in the loader's superset shape — the pane component picks the
+  // fields its view needs (see lib/email/pane.ts), so there's no reason to
+  // keep the chat and list variants apart here.
+  let paneMessages: MappedMessage[] = [];
+  // Non-null when the conversation has more history than one page — drives the
+  // pane's "load earlier messages" control.
+  let paneOlderCursor: string | null = null;
 
   if (selected) {
     const participants = selected.participant_set ?? [];
@@ -436,17 +440,9 @@ export default async function AppPage({
 
     // Shared with /api/thread/[id], which serves the same pane when a rail row
     // is clicked — see lib/email/pane.ts for why this can't be inlined here.
-    const mapped = await loadPaneMessages(
-      supabase,
-      selected.id,
-      selfAddresses,
-    );
-
-    if (threadView === "contact") {
-      paneMessages = mapped;
-    } else {
-      companyMessages = mapped;
-    }
+    const page = await loadPaneMessages(supabase, selected.id, selfAddresses);
+    paneMessages = page.messages;
+    paneOlderCursor = page.olderCursor;
   }
 
   // Sent and Trash: a flat list of messages, independent of thread selection.
@@ -549,9 +545,8 @@ export default async function AppPage({
         selectedId={selected?.id ?? null}
         contactSuggestions={contactSuggestions}
         serverThread={paneThread}
-        serverMessages={
-          activeTab === "contact" ? paneMessages : companyMessages
-        }
+        serverMessages={paneMessages}
+        serverOlderCursor={paneOlderCursor}
       >
         {/* Sent and Trash cut across threads, so they replace the pane with a
             flat list. The thread views' panes are rendered by AppShell itself,

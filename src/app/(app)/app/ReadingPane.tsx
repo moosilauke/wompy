@@ -67,6 +67,10 @@ export function ReadingPane({
   loading = false,
   onSent,
   onRetry,
+  hasOlder = false,
+  loadingOlder = false,
+  olderCount = 0,
+  onLoadOlder,
 }: {
   thread: PaneThread | null;
   messages: PaneMessage[];
@@ -78,6 +82,13 @@ export function ReadingPane({
   onSent?: () => void;
   /** Retries a message whose send failed, by its pending id. */
   onRetry?: (tempId: string) => void;
+  /** The conversation goes back further than what's loaded. */
+  hasOlder?: boolean;
+  loadingOlder?: boolean;
+  /** How many messages came from paging backwards — lets the scroll container
+   * hold position when they're prepended. */
+  olderCount?: number;
+  onLoadOlder?: () => void;
 }) {
   if (!thread) {
     return (
@@ -125,8 +136,25 @@ export function ReadingPane({
       <ScrollToLatest
         threadId={thread.id}
         messageCount={messages.length}
+        olderCount={olderCount}
         className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-5 md:px-10 md:py-7"
       >
+        {/* A long conversation loads its most recent messages first; this
+            walks back through the rest. Without it the older ones were simply
+            unreachable — the query has always been capped, silently. */}
+        {hasOlder && (
+          <div className="flex justify-center pb-1">
+            <button
+              type="button"
+              onClick={onLoadOlder}
+              disabled={loadingOlder}
+              className="rounded-full border border-black/[0.08] bg-white px-3.5 py-1.5 text-[12.5px] font-semibold text-text-muted shadow-[0_2px_8px_rgba(0,0,0,0.06)] transition-colors hover:text-text-body disabled:opacity-50"
+            >
+              {loadingOlder ? "Loading…" : "Load earlier messages"}
+            </button>
+          </div>
+        )}
+
         {messages.length === 0 ? (
           <p className="text-center text-sm text-text-muted">
             No messages in this conversation yet.

@@ -28,7 +28,7 @@ import { loadPaneMessages } from "@/lib/email/pane";
  * thread id from another user's mailbox returns nothing.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   if (!isSupabaseConfigured) {
@@ -72,7 +72,16 @@ export async function GET(
     ),
   );
 
-  const messages = await loadPaneMessages(supabase, threadId, selfAddresses);
+  // `?before=<iso>` walks back through a long conversation; absent means the
+  // newest page.
+  const before = new URL(request.url).searchParams.get("before");
 
-  return NextResponse.json({ messages });
+  const { messages, olderCursor } = await loadPaneMessages(
+    supabase,
+    threadId,
+    selfAddresses,
+    before,
+  );
+
+  return NextResponse.json({ messages, olderCursor });
 }

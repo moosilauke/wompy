@@ -2,6 +2,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { CompanyCard } from "./CompanyCard";
 import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
 import type { ReactionSummary } from "@/components/ui/ReactionBadges";
+import { PaneSkeleton } from "./PaneSkeleton";
 import { ScrollToLatest } from "./ScrollToLatest";
 
 export interface CompanyMessage {
@@ -40,10 +41,14 @@ export function CompanyPane({
   thread,
   messages,
   isSpam = false,
+  loading = false,
 }: {
   thread: CompanyThread | null;
   messages: CompanyMessage[];
   isSpam?: boolean;
+  /** Messages still in flight for a sender whose header is already known —
+   * see ReadingPane, same arrangement. */
+  loading?: boolean;
 }) {
   if (!thread) {
     return (
@@ -75,7 +80,11 @@ export function CompanyPane({
         </div>
       </div>
 
-      {/* Classic list: one card per message, subject foremost. */}
+      {/* Classic list: one card per message, subject foremost. Placeholder
+          cards while they load — the header above is already real. */}
+      {loading && messages.length === 0 ? (
+        <PaneSkeleton />
+      ) : (
       <ScrollToLatest
         threadId={thread.id}
         messageCount={messages.length}
@@ -105,6 +114,7 @@ export function CompanyPane({
           </ul>
         )}
       </ScrollToLatest>
+      )}
     </section>
   );
 }

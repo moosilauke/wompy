@@ -8,6 +8,9 @@ import { MobileRailDrawer } from "./MobileRailDrawer";
 import { useThreadSelection } from "./useThreadSelection";
 import { useMediaQuery, MD_BREAKPOINT } from "./useMediaQuery";
 import { RailMutationsProvider, type RemovedThread } from "./RailMutations";
+import { ThreadPane } from "./ThreadPane";
+import type { PaneMessage, PaneThread } from "./ReadingPane";
+import type { CompanyMessage } from "./CompanyPane";
 import type { ContactSuggestion } from "./NewMessage";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 
@@ -66,6 +69,8 @@ export function AppShell({
   initialCursors,
   selectedId,
   contactSuggestions,
+  serverThread,
+  serverMessages,
   children,
 }: {
   userEmail: string | null;
@@ -79,6 +84,11 @@ export function AppShell({
   initialCursors: Record<ContactTab, RailCursor | null>;
   selectedId: string | null;
   contactSuggestions: ContactSuggestion[];
+  /** The conversation the server rendered, for the cold-load and deep-link
+   * path. Once the user clicks a row, the client's choice takes over. */
+  serverThread: PaneThread | null;
+  serverMessages: PaneMessage[] | CompanyMessage[];
+  /** Sent/Trash only — thread views render their pane internally. */
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -104,6 +114,17 @@ export function AppShell({
     useState<Record<ContactTab, RailCursor | null>>(initialCursors);
   const [lastServerRailByTab, setLastServerRailByTab] = useState(railByTab);
   const [loadingMore, setLoadingMore] = useState<ContactTab | null>(null);
+
+  // The conversation the user clicked, if any. Null means "whatever the server
+  // chose" — a cold load, a deep link, or back/forward. Holding the whole
+  // RailThread (not just the id) is what lets the pane paint its header on the
+  // same frame as the click: everything the header shows is already here.
+  //
+  // Kept as a snapshot AND re-resolved against live rail state below, so a
+  // mark-read patch or a background refresh that changes the row is reflected
+  // in the open pane rather than leaving it on a stale copy.
+  const [openThread, setOpenThread] = useState<RailThread | null>(null);
+  const [lastServerSelectedId, setLastServerSelectedId] = useState(selectedId);
 
   // A fresh server render — most often a BACKGROUND one: the sync poller
   // (~2min) or the backfill poller (~1.5-4s while a backfill is active) both
@@ -168,9 +189,35 @@ export function AppShell({
     activeTab = initialTab;
   }
 
+  // Same pattern for the open conversation: when the server sends a different
+  // selectedId than last time — a back/forward, or a deep link — that's a real
+  // navigation and it wins over the locally-clicked thread. A background
+  // refresh re-sends the SAME selectedId, so this correctly ignores those and
+  // leaves the user's clicked conversation open.
+  let currentOpen = openThread;
+  if (selectedId !== lastServerSelectedId) {
+    setLastServerSelectedId(selectedId);
+    setOpenThread(null);
+    currentOpen = null;
+  }
+
+  // Opening a conversation: state first so the row highlights and the header
+  // paints this frame, then the URL (replaceState, not a navigation — the
+  // server render this would trigger is exactly what we're avoiding), then
+  // ThreadPane fetches just the messages.
+  const openConversation = useCallback((thread: RailThread) => {
+    setOpenThread(thread);
+    const url = new URL(window.location.href);
+    url.searchParams.set("thread", thread.id);
+    window.history.replaceState(null, "", url);
+  }, []);
+
   const selectTab = (tab: AppView) => {
     if (tab === activeTab) return;
     setSelectedTab(tab);
+    // The URL drops ?thread= below, so the locally-open conversation has to go
+    // with it — otherwise it would stay in the pane under a different tab.
+    setOpenThread(null);
 
     // replaceState rather than router.push: this must not trigger a server
     // render, and it keeps tab switching out of the back-button history, which
@@ -180,15 +227,36 @@ export function AppShell({
     url.searchParams.delete("thread");
     window.history.replaceState(null, "", url);
 
-    // Thread views render instantly from the rail data already held for every
-    // tab; the server fetch behind them only fills in the reading pane. Sent and
-    // Trash have no client-side data, so they genuinely wait on the server.
-    router.replace(`/app?tab=${tab}`, { scroll: false });
+    // Only Sent and Trash need the server: they're flat message lists with no
+    // client-side data. Thread views render the rail from state already held
+    // for every tab, and the pane now fetches its own messages, so the server
+    // render this used to trigger for them was pure waste — twelve queries to
+    // produce a page the client had already drawn.
+    if (!isThreadView(tab)) {
+      router.replace(`/app?tab=${tab}`, { scroll: false });
+    }
   };
 
   // Sent and Trash are flat message lists with no conversation rail. Held as a
   // narrowed value rather than a boolean so the rail's props typecheck.
   const railTab = isThreadView(activeTab) ? activeTab : null;
+
+  // What the rail highlights. The clicked thread wins over the server's choice
+  // so the row goes active on the same frame as the click, rather than when a
+  // server render eventually agrees.
+  const effectiveSelectedId = currentOpen?.id ?? selectedId;
+
+  // Prefer the live rail row over the click-time snapshot, so patches that
+  // land after opening (mark-read clearing the dot, a refresh bringing a newer
+  // snippet) show up in the pane's header instead of being frozen at whatever
+  // the row looked like when it was clicked. Falls back to the snapshot for a
+  // row that has since left the rail — trashing the open conversation removes
+  // it, and the pane shouldn't blank out mid-undo.
+  const liveOpenThread =
+    currentOpen && railTab
+      ? (threadsByTab[railTab].find((t) => t.id === currentOpen.id) ??
+        currentOpen)
+      : currentOpen;
 
   // Ctrl/shift-click multi-select (see useThreadSelection). One instance
   // serves whichever tab is currently active — only one rail tab is ever
@@ -197,7 +265,7 @@ export function AppShell({
   // thread (selectedId) is passed in as the implicit starting anchor.
   const selection = useThreadSelection(
     railTab ? threadsByTab[railTab].map((t) => t.id) : [],
-    selectedId,
+    effectiveSelectedId,
   );
 
   const selectTabWithClear = (tab: AppView) => {
@@ -316,8 +384,9 @@ export function AppShell({
               <div className="flex">
                 <ContactRail
                   threads={threadsByTab[railTab]}
-                  selectedId={selectedId}
+                  selectedId={effectiveSelectedId}
                   activeTab={railTab}
+                  onOpen={openConversation}
                   contactSuggestions={contactSuggestions}
                   hasMore={cursorByTab[railTab] !== null}
                   loadingMore={loadingMore === railTab}
@@ -332,8 +401,9 @@ export function AppShell({
               <MobileRailDrawer>
                 <ContactRail
                   threads={threadsByTab[railTab]}
-                  selectedId={selectedId}
+                  selectedId={effectiveSelectedId}
                   activeTab={railTab}
+                  onOpen={openConversation}
                   contactSuggestions={contactSuggestions}
                   className="w-full"
                   hasMore={cursorByTab[railTab] !== null}
@@ -345,7 +415,22 @@ export function AppShell({
                 />
               </MobileRailDrawer>
             ))}
-          <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
+          <div className="flex min-h-0 min-w-0 flex-1">
+            {/* Thread views own their pane so a click can swap it without a
+                server render. Sent and Trash are flat lists with no client
+                data, so they stay server-rendered as children. */}
+            {railTab ? (
+              <ThreadPane
+                tab={railTab}
+                serverThread={serverThread}
+                serverMessages={serverMessages}
+                openThread={liveOpenThread}
+                isSpam={railTab === "spam"}
+              />
+            ) : (
+              children
+            )}
+          </div>
         </div>
       </div>
     </RailMutationsProvider>

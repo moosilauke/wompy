@@ -6,18 +6,14 @@ import {
   fallbackLabel,
   parseAddress,
 } from "@/lib/email/addresses";
-import { htmlToText, normalizeSnippet } from "@/lib/email/text";
-import { buildExcerpt } from "@/lib/email/excerpt";
+import { normalizeSnippet } from "@/lib/email/text";
+import { loadPaneMessages } from "@/lib/email/pane";
 import { canReactTo } from "@/lib/email/reactions";
 import { brandLogoUrl, logoDomainFor } from "@/lib/email/logos";
 import { AppShell } from "./AppShell";
 import { type RailThread } from "./ContactRail";
-import {
-  ReadingPane,
-  type PaneMessage,
-  type PaneThread,
-} from "./ReadingPane";
-import { CompanyPane, type CompanyMessage } from "./CompanyPane";
+import { type PaneMessage, type PaneThread } from "./ReadingPane";
+import { type CompanyMessage } from "./CompanyPane";
 import { MessageListPane, type ListedMessage } from "./MessageListPane";
 import { ToastProvider } from "./Toasts";
 import { OptimisticReactionsProvider } from "./OptimisticReactions";
@@ -28,8 +24,6 @@ import {
   type ContactTab,
   type TabCountMode,
 } from "@/lib/types";
-import type { AttachmentInfo } from "@/components/ui/AttachmentChip";
-import type { ReactionSummary } from "@/components/ui/ReactionBadges";
 
 /**
  * The authenticated app shell: contact rail + reading pane, per the design spec.
@@ -319,6 +313,11 @@ export default async function AppPage({
       label: labelFor(primary),
       logoUrl: logoFor(primary, t.tab),
       extraParticipants: Math.max(0, participants.length - 1),
+      participants,
+      // `participants` already excludes the user, so this is exactly the set a
+      // reaction would be sent to. A self-thread (no other participants) is
+      // always reactable.
+      canReact: participants.length === 0 || canReactTo(participants),
       snippet: snippetByThread.get(t.id) ?? "",
       lastMessageAt: t.last_message_at,
       // The real unread state, open thread included. The open thread is NOT
@@ -434,151 +433,18 @@ export default async function AppPage({
       logoUrl: logoFor(primary, selected.tab),
     };
 
-    const { data: messageRows } = await supabase
-      .from("messages")
-      .select(
-        "id, from_address, subject, body_text, body_html, snippet, internal_date, label_ids",
-      )
-      .eq("thread_id", selected.id)
-      .is("trashed_at", null)
-      // Reactions render as badges on their target, not as their own bubbles.
-      .eq("is_reaction", false)
-      // Fetched newest-first so the limit keeps the most RECENT messages, then
-      // reversed below for display. Ordering ascending here would silently take
-      // the oldest 200 of a long conversation.
-      .order("internal_date", { ascending: false })
-      .limit(200);
-
-    // Attachments for exactly the messages being rendered — one extra query
-    // rather than a join, so the message fetch stays narrow.
-    const messageIds = ((messageRows ?? []) as { id: string }[]).map(
-      (m) => m.id,
+    // Shared with /api/thread/[id], which serves the same pane when a rail row
+    // is clicked — see lib/email/pane.ts for why this can't be inlined here.
+    const mapped = await loadPaneMessages(
+      supabase,
+      selected.id,
+      selfAddresses,
     );
-    const [{ data: attachmentRows }, { data: reactionRows }] =
-      messageIds.length > 0
-        ? await Promise.all([
-            supabase
-              .from("attachments")
-              .select("id, message_id, filename, mime_type, size_bytes")
-              .in("message_id", messageIds),
-            supabase
-              .from("reactions")
-              .select("id, message_id, emoji, from_address")
-              .in("message_id", messageIds),
-          ])
-        : [{ data: [] }, { data: [] }];
 
-    // Grouped by target and collapsed by emoji, so three thumbs-up render as
-    // one badge with a count rather than three identical badges.
-    const reactionsByMessage = new Map<string, ReactionSummary[]>();
-    for (const row of (reactionRows ?? []) as {
-      message_id: string;
-      emoji: string;
-      from_address: string;
-    }[]) {
-      const list = reactionsByMessage.get(row.message_id) ?? [];
-      const existing = list.find((r) => r.emoji === row.emoji);
-      const who = parseAddress(row.from_address);
-      const name = who?.displayName || who?.address || "someone";
-      if (existing) {
-        existing.count += 1;
-        existing.people.push(name);
-      } else {
-        list.push({ emoji: row.emoji, count: 1, people: [name] });
-      }
-      reactionsByMessage.set(row.message_id, list);
-    }
-
-    const attachmentsByMessage = new Map<string, AttachmentInfo[]>();
-    for (const row of (attachmentRows ?? []) as {
-      id: string;
-      message_id: string;
-      filename: string;
-      mime_type: string | null;
-      size_bytes: number | null;
-    }[]) {
-      const list = attachmentsByMessage.get(row.message_id) ?? [];
-      list.push({
-        id: row.id,
-        filename: row.filename,
-        mimeType: row.mime_type,
-        sizeBytes: row.size_bytes,
-      });
-      attachmentsByMessage.set(row.message_id, list);
-    }
-
-    const rows = ((messageRows ?? []) as {
-      id: string;
-      from_address: string | null;
-      subject: string | null;
-      body_text: string | null;
-      body_html: string | null;
-      snippet: string | null;
-      internal_date: string | null;
-      label_ids: string[] | null;
-    }[])
-      // Chronological for display: oldest first, newest at the bottom. Both
-      // views read the same way — a conversation runs down the page, and the
-      // most recent message is where you land.
-      .reverse();
-
-    // Excerpting runs on the server so the client never receives the quoted
-    // history and signatures it isn't going to show.
     if (threadView === "contact") {
-      paneMessages = rows.map((m) => {
-        const from = parseAddress(m.from_address);
-        // HTML-only mail (42% of the corpus) is converted to text rather than
-        // sanitized and injected: the chat view renders prose, and this keeps
-        // `body_html` out of the DOM entirely — no XSS surface, no remote image
-        // loads signalling that mail was opened.
-        const source =
-          m.body_text ||
-          (m.body_html ? htmlToText(m.body_html) : null) ||
-          normalizeSnippet(m.snippet);
-        const excerpt = buildExcerpt(source);
-        return {
-          id: m.id,
-          // The From address is the only reliable signal for "did I write this".
-          // Gmail's SENT label is deliberately NOT consulted: when you correspond
-          // with your own other accounts, it returns SENT on inbound messages
-          // too, which made every bubble render as outgoing.
-          outgoing: from ? selfAddresses.has(canonicalAddress(from.address)) : false,
-          body: excerpt.text,
-          fullBody: excerpt.full,
-          truncated: excerpt.truncated,
-          // Only flagged when conversion produced nothing readable — otherwise the
-          // text above is the message, and a "preview only" note would be wrong.
-          htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
-          attachments: attachmentsByMessage.get(m.id) ?? [],
-          reactions: reactionsByMessage.get(m.id) ?? [],
-          sentAt: m.internal_date,
-        };
-      });
+      paneMessages = mapped;
     } else {
-      companyMessages = rows.map((m) => {
-        // HTML-only mail (42% of the corpus) is converted to text rather than
-        // sanitized and injected: the chat view renders prose, and this keeps
-        // `body_html` out of the DOM entirely — no XSS surface, no remote image
-        // loads signalling that mail was opened.
-        const source =
-          m.body_text ||
-          (m.body_html ? htmlToText(m.body_html) : null) ||
-          normalizeSnippet(m.snippet);
-        const excerpt = buildExcerpt(source);
-        return {
-          id: m.id,
-          subject: m.subject,
-          body: excerpt.text,
-          fullBody: excerpt.full,
-          truncated: excerpt.truncated,
-          // Only flagged when conversion produced nothing readable — otherwise the
-          // text above is the message, and a "preview only" note would be wrong.
-          htmlOnly: !m.body_text && !!m.body_html && !excerpt.text,
-          attachments: attachmentsByMessage.get(m.id) ?? [],
-          reactions: reactionsByMessage.get(m.id) ?? [],
-          sentAt: m.internal_date,
-        };
-      });
+      companyMessages = mapped;
     }
   }
 
@@ -657,7 +523,13 @@ export default async function AppPage({
   return (
     <ToastProvider>
       <OptimisticReactionsProvider>
-      {/* Renders nothing; fires the mark-read request for the open thread. */}
+      {/* Renders nothing; marks the SERVER-chosen conversation read — a cold
+          load, a deep link, or back/forward. Conversations opened by clicking
+          a rail row are handled by ThreadPane instead, since no server render
+          happens for those. The two never target the same thread: once a row
+          is clicked, ThreadPane's copy takes over, and this one's internal
+          "only fire when the id changes" guard keeps it from re-firing on the
+          background refreshes that re-render this page. */}
       {selected && (
         <MarkThreadRead
           threadId={selected.id}
@@ -674,21 +546,17 @@ export default async function AppPage({
         initialCursors={initialCursors}
         selectedId={selected?.id ?? null}
         contactSuggestions={contactSuggestions}
+        serverThread={paneThread}
+        serverMessages={
+          activeTab === "contact" ? paneMessages : companyMessages
+        }
       >
         {/* Sent and Trash cut across threads, so they replace the pane with a
-            flat list. Spam uses the classic list view — you skim it for false
-            positives, you don't hold conversations in it. */}
+            flat list. The thread views' panes are rendered by AppShell itself,
+            so a rail click can swap them without a server render. */}
         {activeTab === "sent" || activeTab === "trash" ? (
           <MessageListPane view={activeTab} messages={listedMessages} />
-        ) : activeTab === "contact" ? (
-          <ReadingPane thread={paneThread} messages={paneMessages} />
-        ) : (
-          <CompanyPane
-            thread={paneThread}
-            messages={companyMessages}
-            isSpam={activeTab === "spam"}
-          />
-        )}
+        ) : null}
       </AppShell>
       </OptimisticReactionsProvider>
     </ToastProvider>

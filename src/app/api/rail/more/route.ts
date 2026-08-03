@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { normalizeSnippet } from "@/lib/email/text";
 import { fallbackLabel } from "@/lib/email/addresses";
+import { canReactTo } from "@/lib/email/reactions";
 import { brandLogoUrl, logoDomainFor } from "@/lib/email/logos";
 import type { ContactTab } from "@/lib/types";
 import type { RailThread } from "@/app/(app)/app/ContactRail";
@@ -160,6 +161,11 @@ export async function POST(request: Request) {
       label: labelFor(primary),
       logoUrl: logoFor(primary, t.tab),
       extraParticipants: Math.max(0, participants.length - 1),
+      participants,
+      // `participants` already excludes the user, so this is exactly the set a
+      // reaction would be sent to. A self-thread (no other participants) is
+      // always reactable.
+      canReact: participants.length === 0 || canReactTo(participants),
       snippet: snippetByThread.get(t.id) ?? "",
       lastMessageAt: t.last_message_at,
       unread,

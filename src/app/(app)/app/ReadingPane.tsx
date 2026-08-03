@@ -3,6 +3,7 @@ import { Bubble, BubbleRow, DayDivider } from "@/components/ui/Bubble";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
 import { BubbleReactionSlot } from "./BubbleReactionSlot";
+import { PaneSkeleton } from "./PaneSkeleton";
 import { ScrollToLatest } from "./ScrollToLatest";
 import {
   AttachmentList,
@@ -53,9 +54,14 @@ export interface PaneThread {
 export function ReadingPane({
   thread,
   messages,
+  loading = false,
 }: {
   thread: PaneThread | null;
   messages: PaneMessage[];
+  /** Messages are still in flight for a thread whose header is already known
+   * — the header, avatar, and composer render for real while the bubbles are
+   * placeholders. */
+  loading?: boolean;
 }) {
   if (!thread) {
     return (
@@ -95,7 +101,11 @@ export function ReadingPane({
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Messages. While they're loading the header above and composer below
+          are already real, so only this middle band is a placeholder. */}
+      {loading && messages.length === 0 ? (
+        <PaneSkeleton />
+      ) : (
       <ScrollToLatest
         threadId={thread.id}
         messageCount={messages.length}
@@ -159,6 +169,7 @@ export function ReadingPane({
           ))
         )}
       </ScrollToLatest>
+      )}
 
       <Composer threadId={thread.id} recipientLabel={thread.label} />
     </section>

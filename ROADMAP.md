@@ -95,6 +95,19 @@ Last updated: 2026-08-03
   inherits all of it, since it delegates to the same three functions. Opening
   an unread thread now patches the rail directly instead of triggering a
   full-page `router.refresh()` for a one-field change
+- **Instant conversation open** — clicking a rail row was a full server
+  navigation that re-ran the whole `force-dynamic` page (~12 queries plus
+  dependent waves) with no loading state, so the old conversation sat there and
+  the clicked row didn't even highlight. Now the header, avatar, and composer
+  paint on the same frame as the click from rail data the client already holds,
+  and only the messages are fetched, from a scoped `/api/thread/[id]`. Bubbles
+  arrive behind a skeleton. Mapping lives in `lib/email/pane.ts`, shared with
+  the server-rendered path so the two can't drift
+- **Stopped fetching `body_html` that's never used** — the pane query pulled
+  both body columns for every message, but HTML is only needed for the ~28%
+  with no `body_text`. It's ~91% of the bytes in a thread: the heaviest
+  conversation in the test mailbox was fetching 13 MB to render 246 KB. Now
+  fetched only for the rows that actually need it
 - **Halved the rail's render cost** — the contact rail was being rendered twice
   (inline for desktop, again inside the mobile drawer, with only CSS hiding the
   irrelevant one), so 200 threads cost 400 rows, each carrying a context menu

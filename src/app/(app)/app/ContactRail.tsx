@@ -16,6 +16,13 @@ export interface RailThread {
   label: string;
   /** Extra participants beyond the first, for group threads. */
   extraParticipants: number;
+  /** Everyone on the thread except the user (participant-set threading).
+   * Carried on the rail row so opening a conversation can paint its header
+   * from data already on the client, without waiting on the server. */
+  participants: string[];
+  /** Whether the add-reaction control is offered for this conversation —
+   * same reason as `participants`: the pane needs it on the first frame. */
+  canReact: boolean;
   snippet: string;
   lastMessageAt: string | null;
   /**
@@ -50,6 +57,7 @@ export function ContactRail({
   onLoadMore,
   selectedIds = EMPTY_SELECTION,
   onRowClick,
+  onOpen,
   onSelectionDone,
 }: {
   threads: RailThread[];
@@ -74,6 +82,11 @@ export function ContactRail({
    * click was consumed as a selection toggle (navigation should be
    * suppressed) rather than a normal open. */
   onRowClick?: (threadId: string, e: React.MouseEvent) => boolean;
+  /** Opens a conversation client-side instead of navigating. Given the whole
+   * thread (not just its id) so the pane can paint its header from it
+   * immediately. Omitted where there's no client pane to fill — the row's
+   * <Link> then behaves as an ordinary navigation. */
+  onOpen?: (thread: RailThread) => void;
   /** Clears the selection once a bulk action from the right-click menu fires. */
   onSelectionDone?: () => void;
 }) {
@@ -107,7 +120,26 @@ export function ContactRail({
                   aria-current={active ? "true" : undefined}
                   className="block"
                   onClick={(e) => {
-                    if (onRowClick?.(thread.id, e)) e.preventDefault();
+                    if (onRowClick?.(thread.id, e)) {
+                      e.preventDefault();
+                      return;
+                    }
+                    // Modified and non-primary clicks stay real navigations —
+                    // cmd/ctrl-click opens a new tab, shift a new window,
+                    // middle-click a background tab. Only a plain left-click
+                    // becomes the instant client-side open.
+                    if (
+                      !onOpen ||
+                      e.metaKey ||
+                      e.ctrlKey ||
+                      e.shiftKey ||
+                      e.altKey ||
+                      e.button !== 0
+                    ) {
+                      return;
+                    }
+                    e.preventDefault();
+                    onOpen(thread);
                   }}
                 >
                   <RailRow

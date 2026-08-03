@@ -18,6 +18,14 @@ Last updated: 2026-08-03
 - Raw sync into `messages` (polling)
 - Participant-set threading: a thread is everyone on the message except you
 - Gmail alias canonicalization (dots, `+tags`)
+- **Quote-aware address parsing** — address headers were split on every comma,
+  including commas inside quoted display names, so an ordinary
+  `"Cosgrave, Dan" <dan@x.com>` became two entries and the fragment
+  `"Cosgrave` (no `@` at all) was stored as a contact. "Lastname, Firstname"
+  is a common corporate convention, so this wasn't rare: 22 junk contacts in
+  one real mailbox. The splitter now respects quotes and angle brackets, and
+  `parseAddress` rejects anything that isn't plausibly an address rather than
+  treating leftover text as a bare one
 - Classifier, rules 0–6 (see `src/lib/email/classifier.ts`), scoped to
   changed contacts/threads per sync rather than a full-mailbox rescan
 - Sent-mail sync, so reply-reciprocity and outgoing bubbles work
@@ -36,7 +44,12 @@ Last updated: 2026-08-03
 - App shell: contact rail + reading pane, chat bubbles, day dividers
 - Contacts (chat view) / Companies (list view) / Spam quarantine
 - More ▾ menu: Sent, Trash, Spam
-- Reply and net-new compose (365-char constraint, full-email escape hatch)
+- Reply and net-new compose (365-char constraint, full-email escape hatch).
+  Recipient suggestions open on the people you actually correspond with —
+  ranked by real-people-before-companies, then whether you've ever replied,
+  then thread volume, then recency (`contact_suggestions` RPC). Alphabetical
+  ordering put whoever sorted first in front of you; recency alone surfaced
+  one-off senders like support tickets and unsubscribe confirmations
 - Delete → Gmail Trash, with undo; right-click menus at thread and message level
 - Read/unread — Wompy-native, a per-thread read watermark in Supabase. No Gmail
   round-trip on mark-read; state follows the user across devices and is
@@ -174,13 +187,33 @@ Being live (even unmarketed) changes what "urgent" means — anyone could sign
 up today, so gaps that were invisible in local dev are now real risk, not
 future risk.
 
+Nothing is currently blocking. The performance push is done and the app feels
+fast; what follows is a judgement call about what the product needs next
+rather than a queue. Three candidates, roughly in order of how often they'd
+bite a real user:
+
+### 1. Spam false-positive escape
+A quarantined sender can only be rescued by replying to them in Gmail — i.e.
+by leaving Wompy. Manual override already exists for Contacts/Companies
+(right-click → Move to), so this is mostly wiring the same path out of Spam,
+plus deciding whether rescuing a sender should also un-quarantine their
+existing mail.
+
+### 2. Settings/profile page
+Enough deferred preferences have accumulated to justify building it (tab
+badge counts, and anything else that's been parked). Also the natural home for
+provider config and, later, subscription status.
+
+### 3. Display richer HTML mail
+41% of the corpus is HTML-only and currently rendered as converted text. This
+is the biggest remaining gap between Wompy and what people expect from a mail
+client — but it needs a sanitizer and a considered position on remote images
+(loading them signals that mail was opened), so it's the largest of the three.
+
 ---
 
 ## Backlog
 
-- **Settings/profile page** — collect deferred preferences (see below) until
-  there are enough to justify building it
-  - Tab badge counts: totals vs unreads
 - **Static pages** — Wompy vs Alternatives (competitive page)
 - **Payment/subscriptions** — will use Creem
 - **Profile page** — includes email provider config/reconfig, personal settings, avatar upload, etc
@@ -192,16 +225,20 @@ future risk.
   Account confirmation & password reset stay on Supabase's own token flows;
   point Supabase Auth SMTP at Mailtrap in the dashboard so they deliver
   reliably (config, not code). Future app-originated emails reuse the mailer.
-- **Continue performance enhancements** — delete is batched and the common
-  mutations are optimistic (see Shipped). The remaining latency is **opening a
-  conversation**: it's a full server navigation that re-runs the whole
-  `force-dynamic` page (~12 queries plus dependent waves) with no loading state,
-  so the click has no visible acknowledgment. Fix is a scoped
-  `/api/thread/[id]` route so the pane paints from rail data already held
-  client-side. Then optimistic send, and the serial `messages.get` loop in
-  `sync.ts` (backfill already solved this with a worker pool).
-  Note: "the full-mailbox reclassify on every sync" was listed here for a
-  while — it's already fixed; `ClassifyScope` made classification incremental
+- **Continue performance enhancements** — the big ones are done (see Shipped:
+  optimistic mutations, instant conversation open, optimistic send,
+  parallelized sync fetch, bounded page queries). What's left is smaller and
+  needs migrations:
+  - Two N+1 write loops: `threading.ts` does one `messages.update` per
+    participant bucket, and `reaction-store.ts`'s `linkPendingReactions` does
+    one UPDATE per pending row. Both want a bulk RPC in the style of the
+    existing `apply_contact_tabs` / `upsert_threads_monotonic`
+  - `tab_counts` runs three unbounded `threads ⋈ messages ⋈ thread_reads`
+    aggregations per render; one RPC returning all three tabs would be a
+    single pass
+  - Compute the message excerpt at ingest and store it, so reads never touch
+    `body_html` at all and the per-message `htmlToText` work leaves the click
+    path. The bigger fix behind the `body_html` change already shipped
 - **Contacts' messages multi-select** — rail conversation multi-select shipped
   (ctrl/shift-click, bulk mark read/unread, move, delete). Still to do:
   selecting multiple individual messages within one contact's conversation
@@ -209,12 +246,18 @@ future risk.
 - **Add forwarding** — ability to forward a message to another contact(s)
 - **Special handling of some attachment types** — e.g. for images, preview in modal overlay vs ONLY download (maybe even display thumbnail too?); for calendar invites, option to open in the same calendar as the email provider (e.g. if syncing Gmail, then ICS opens Google Calendar to add calendar invite automatically)
 - **Add icons** — icons will help add visual interest and clue users in more quickly to various functions of a given button/menu
-- **Display full/rich HTML emails** — appears we're converting HTML to text vs selectively rendering some or all of the HTML
 - **Yahoo, Outlook, or iCloud Mail provider** — `src/lib/email/providers.ts` is already a registry
 - **Reply-to-one** in group threads (currently replies go to all participants)
-- **Spam false-positive escape** — a quarantined sender can only be rescued by
-  replying to them in Gmail
+- **Repair mis-grouped threads from the address-parsing bug** — the splitter is
+  fixed going forward, but the malformed fragments it created are still in
+  `threads.participant_set` and `messages.to_addresses`, so a few conversations
+  may be grouped or labelled oddly. Blast radius not yet investigated; the junk
+  `contacts` rows are excluded from the UI, so this is cosmetic until proven
+  otherwise
 - `staleTimes` is an experimental Next flag; revisit when it stabilizes
+
+(Spam false-positive escape, the settings page, and rich HTML mail moved up to
+**Next up**.)
 
 ---
 

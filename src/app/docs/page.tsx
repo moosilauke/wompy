@@ -64,6 +64,11 @@ export default async function DocsPage() {
                 Replying works like a chat: type your message in the composer
                 at the bottom of the conversation and send.
               </li>
+              <li>
+                A long conversation opens on its most recent messages. Use
+                “Load earlier messages” at the top to keep reading back through
+                its history.
+              </li>
             </ul>
           </section>
 

@@ -11,7 +11,6 @@ import { RailMutationsProvider, type RemovedThread } from "./RailMutations";
 import { ThreadPane } from "./ThreadPane";
 import type { PaneThread } from "./ReadingPane";
 import type { MappedMessage } from "@/lib/email/pane";
-import type { ContactSuggestion } from "./NewMessage";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 
 export interface RailCursor {
@@ -68,7 +67,6 @@ export function AppShell({
   railByTab,
   initialCursors,
   selectedId,
-  contactSuggestions,
   serverThread,
   serverMessages,
   serverOlderCursor,
@@ -84,7 +82,6 @@ export function AppShell({
    * page was already the whole list (fewer than RAIL_PAGE_SIZE rows). */
   initialCursors: Record<ContactTab, RailCursor | null>;
   selectedId: string | null;
-  contactSuggestions: ContactSuggestion[];
   /** The conversation the server rendered, for the cold-load and deep-link
    * path. Once the user clicks a row, the client's choice takes over. */
   serverThread: PaneThread | null;
@@ -393,7 +390,6 @@ export function AppShell({
                   selectedId={effectiveSelectedId}
                   activeTab={railTab}
                   onOpen={openConversation}
-                  contactSuggestions={contactSuggestions}
                   hasMore={cursorByTab[railTab] !== null}
                   loadingMore={loadingMore === railTab}
                   onLoadMore={() => loadMore(railTab)}
@@ -410,7 +406,6 @@ export function AppShell({
                   selectedId={effectiveSelectedId}
                   activeTab={railTab}
                   onOpen={openConversation}
-                  contactSuggestions={contactSuggestions}
                   className="w-full"
                   hasMore={cursorByTab[railTab] !== null}
                   loadingMore={loadingMore === railTab}

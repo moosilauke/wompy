@@ -35,3 +35,19 @@ export const GMAIL_RETRY_OPTIONS: MethodOptions = {
     ],
   },
 };
+
+/**
+ * How many `messages.get` calls to have in flight at once.
+ *
+ * Gmail has no batch fetch for message bodies (unlike batchModify), so
+ * throughput has to come from a small worker pool. Shared by regular sync and
+ * historical backfill so the combined load stays easy to reason about: at 5
+ * quota units per get, 10 concurrent is 50 units/sec per job, and the two can
+ * run at the same time (the backfill poller fires every ~1.5s while a sync
+ * runs every 2 minutes) — so ~100 units/sec worst case, against Gmail's ~250
+ * units/sec per-user budget. GMAIL_RETRY_OPTIONS covers the rest.
+ *
+ * Raising this means re-checking that headroom, which is why it lives here
+ * rather than being defined twice.
+ */
+export const GMAIL_FETCH_CONCURRENCY = 10;

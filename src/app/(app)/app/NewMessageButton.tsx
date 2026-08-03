@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { NewMessage, type ContactSuggestion } from "./NewMessage";
+import { NewMessage } from "./NewMessage";
 
-/** Opens the net-new compose dialog. Lives in the rail, above the contact list. */
-export function NewMessageButton({
-  contacts,
-}: {
-  contacts: ContactSuggestion[];
-}) {
+/** Opens the net-new compose dialog. Lives in the rail, above the contact list.
+ *
+ * Recipient suggestions are fetched by the dialog itself when it opens, so
+ * nothing about the address book is loaded or shipped until someone actually
+ * starts a message. */
+export function NewMessageButton() {
   const [open, setOpen] = useState(false);
 
   return (
@@ -21,9 +21,7 @@ export function NewMessageButton({
         New message
       </button>
 
-      {open && (
-        <NewMessage contacts={contacts} onClose={() => setOpen(false)} />
-      )}
+      {open && <NewMessage onClose={() => setOpen(false)} />}
     </>
   );
 }

@@ -16,7 +16,10 @@ import {
   type StoredReaction,
 } from "@/lib/email/reaction-store";
 import { canonicalAddress, parseAddress } from "@/lib/email/addresses";
-import { GMAIL_RETRY_OPTIONS } from "@/lib/gmail/quota";
+import {
+  GMAIL_FETCH_CONCURRENCY,
+  GMAIL_RETRY_OPTIONS,
+} from "@/lib/gmail/quota";
 import type { EmailAccount } from "@/lib/types";
 
 /**
@@ -85,57 +88,104 @@ export async function syncAccount(account: EmailAccount): Promise<SyncResult> {
     pageToken = list.nextPageToken ?? undefined;
   } while (pageToken && ids.length < MAX_MESSAGES_PER_SYNC);
 
-  const boundedIds = ids.slice(0, MAX_MESSAGES_PER_SYNC);
+  const listedIds = ids.slice(0, MAX_MESSAGES_PER_SYNC);
+
+  // Skip the messages.get + parse path entirely for ids already stored — one
+  // indexed query against a full fetch each. Ordinary syncs overlap heavily
+  // with what's already stored (the `after:` watermark has second
+  // granularity, so the boundary second re-lists), and this is what stops
+  // those from costing a round-trip apiece. Same pre-filter backfill uses.
+  //
+  // Guarded on there being anything to check: the common case for a 2-minute
+  // poll is an empty list, and querying for membership in an empty set is a
+  // round-trip whose answer is already known.
+  let boundedIds = listedIds;
+  if (listedIds.length > 0) {
+    const { data: existing } = await admin
+      .from("messages")
+      .select("gmail_message_id")
+      .eq("email_account_id", account.id)
+      .in("gmail_message_id", listedIds);
+    const alreadyStored = new Set(
+      ((existing ?? []) as { gmail_message_id: string }[]).map(
+        (r) => r.gmail_message_id,
+      ),
+    );
+    boundedIds = listedIds.filter((id) => !alreadyStored.has(id));
+  }
 
   // 2. Fetch each full message and map to a row. Attachment metadata is kept
   //    alongside, keyed by Gmail id, so it can be attributed to the stored rows
   //    after the upsert assigns them ids.
-  const rows = [];
+  //
+  //    Bounded concurrency rather than one at a time: Gmail has no batch fetch
+  //    for message bodies, so up to MAX_MESSAGES_PER_SYNC sequential round-trips
+  //    was the single largest cost in a sync. Backfill already worked this way;
+  //    this is the same pool, sharing one concurrency constant so the combined
+  //    quota load stays easy to reason about (see GMAIL_FETCH_CONCURRENCY).
+  const rows: ReturnType<typeof mapMessageToRow>[] = [];
   const attachmentsByGmailId = new Map<
     string,
     ReturnType<typeof extractAttachments>
   >();
   const reactions: StoredReaction[] = [];
-  for (const id of boundedIds) {
-    const full = (
-      await gmail.users.messages.get(
-        {
-          userId: "me",
-          id,
-          format: "full",
-        },
-        GMAIL_RETRY_OPTIONS,
-      )
-    ).data;
-    // Defensive: `-in:drafts` above should already exclude these, but a
-    // draft was never actually sent to anyone, so it must never be stored as
-    // a message regardless of how it was fetched — this guards against the
-    // query filter behaving unexpectedly for some account/locale rather than
-    // relying on it alone.
-    if ((full.labelIds ?? []).includes("DRAFT")) continue;
 
-    const row = mapMessageToRow(account, full);
+  let cursor = 0;
+  async function fetchWorker() {
+    for (;;) {
+      const i = cursor;
+      cursor += 1;
+      if (i >= boundedIds.length) return;
+      const id = boundedIds[i];
 
-    // A reaction is an ordinary email carrying a specially-typed part. Recorded
-    // separately and flagged, so it renders as a badge on its target rather
-    // than as a one-character reply in the conversation.
-    const emoji = full.payload ? extractReaction(full.payload) : null;
-    if (emoji) {
-      reactions.push({
-        gmailMessageId: id,
-        targetMessageIdHeader: row.in_reply_to,
-        fromAddress: row.from_address ?? "",
-        emoji,
-        reactedAt: row.internal_date,
-      });
-      row.is_reaction = true;
+      const full = (
+        await gmail.users.messages.get(
+          { userId: "me", id, format: "full" },
+          GMAIL_RETRY_OPTIONS,
+        )
+      ).data;
+      // Defensive: `-in:drafts` above should already exclude these, but a
+      // draft was never actually sent to anyone, so it must never be stored as
+      // a message regardless of how it was fetched — this guards against the
+      // query filter behaving unexpectedly for some account/locale rather than
+      // relying on it alone.
+      if ((full.labelIds ?? []).includes("DRAFT")) continue;
+
+      const row = mapMessageToRow(account, full);
+
+      // A reaction is an ordinary email carrying a specially-typed part.
+      // Recorded separately and flagged, so it renders as a badge on its
+      // target rather than as a one-character reply in the conversation.
+      const emoji = full.payload ? extractReaction(full.payload) : null;
+      if (emoji) {
+        reactions.push({
+          gmailMessageId: id,
+          targetMessageIdHeader: row.in_reply_to,
+          fromAddress: row.from_address ?? "",
+          emoji,
+          reactedAt: row.internal_date,
+        });
+        row.is_reaction = true;
+      }
+
+      rows.push(row);
+
+      const attachments = extractAttachments(full.payload ?? undefined);
+      if (attachments.length > 0) attachmentsByGmailId.set(id, attachments);
     }
-
-    rows.push(row);
-
-    const attachments = extractAttachments(full.payload ?? undefined);
-    if (attachments.length > 0) attachmentsByGmailId.set(id, attachments);
   }
+
+  // Deliberately NOT swallowing per-message errors the way backfill does: a
+  // backfill chunk permanently advances past its page, so skipping one bad
+  // message there is the only way not to lose the rest. A sync's watermark
+  // isn't advanced until it succeeds, so letting the error propagate means
+  // the next poll simply retries — no message is lost by failing loudly.
+  await Promise.all(
+    Array.from(
+      { length: Math.min(GMAIL_FETCH_CONCURRENCY, boundedIds.length) },
+      fetchWorker,
+    ),
+  );
 
   // 3. Upsert (idempotent). Select the stored rows back so threading can key
   //    them without a second round-trip.

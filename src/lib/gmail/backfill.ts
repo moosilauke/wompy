@@ -2,7 +2,10 @@ import "server-only";
 import { google, type gmail_v1 } from "googleapis";
 import { getAuthorizedClient } from "@/lib/gmail/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { GMAIL_RETRY_OPTIONS } from "@/lib/gmail/quota";
+import {
+  GMAIL_FETCH_CONCURRENCY,
+  GMAIL_RETRY_OPTIONS,
+} from "@/lib/gmail/quota";
 import { mapMessageToRow, storeAttachments } from "@/lib/gmail/sync";
 import {
   groupMessagesIntoThreads,
@@ -39,15 +42,11 @@ import type { EmailAccount } from "@/lib/types";
  */
 
 const PAGE_SIZE = 50;
-// Fetched with bounded concurrency, not sequentially — Gmail has no batch
-// fetch for message bodies (unlike batchModify), so throughput has to come
-// from a small worker pool instead. 10 concurrent messages.get calls (5
-// units each) is 50 units/sec, comfortably under Gmail's ~250 units/sec
-// per-user quota even with sync/other concurrent activity on the same
-// account. Doubled from the original 25/5 (which felt slow on a 37k+ message
-// real mailbox) — still a safe margin under the ~10s default serverless
-// timeout this endpoint has no override for.
-const FETCH_CONCURRENCY = 10;
+// Shared with regular sync (see GMAIL_FETCH_CONCURRENCY) so the two jobs'
+// combined quota load is defined in one place — they can and do run at the
+// same time. Was defined here first, when backfill was the only thing that
+// fetched concurrently.
+const FETCH_CONCURRENCY = GMAIL_FETCH_CONCURRENCY;
 
 export type BackfillJobStatus = "pending" | "running" | "complete" | "failed";
 

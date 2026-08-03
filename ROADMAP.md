@@ -95,6 +95,24 @@ Last updated: 2026-08-03
   inherits all of it, since it delegates to the same three functions. Opening
   an unread thread now patches the rail directly instead of triggering a
   full-page `router.refresh()` for a one-field change
+- **Long conversations fully readable** — the pane query has always been capped
+  at 200 messages with nothing in the UI to say so; a 366-message thread simply
+  lost 166 of them. Both panes now page backwards through history on demand,
+  via a composite `(internal_date, id)` cursor (messages within a thread do
+  share timestamps, and a timestamp-only cursor would skip whole groups at a
+  page boundary). The scroll position holds when earlier messages are prepended
+- **Parallelized the sync message fetch** — regular sync fetched up to 200
+  messages one at a time while backfill had solved the identical problem with a
+  worker pool; sync now uses the same pool, sharing one concurrency constant so
+  the combined Gmail quota load is defined in one place. It also skips fetching
+  messages already stored, which the second-granularity watermark means it
+  re-lists on most polls
+- **Bounded the last unbounded page queries** — `contacts` and `thread_reads`
+  were fetched in full on every render (and every 2-minute background refresh)
+  to answer questions about the ≤600 threads on screen, and both silently
+  truncated at PostgREST's 1000-row cap. Compose suggestions moved to
+  `/api/contacts/suggestions`, fetched when the dialog opens rather than
+  serialized into every render's payload
 - **Instant conversation open** — clicking a rail row was a full server
   navigation that re-ran the whole `force-dynamic` page (~12 queries plus
   dependent waves) with no loading state, so the old conversation sat there and

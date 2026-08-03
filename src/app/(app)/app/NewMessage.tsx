@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const MAX_CHAT_LENGTH = 365;
@@ -22,20 +22,39 @@ export interface ContactSuggestion {
  * No subject field: the chat view hides subjects by design, and one is derived
  * server-side so the message still looks normal in the recipient's mail client.
  */
-export function NewMessage({
-  contacts,
-  onClose,
-}: {
-  contacts: ContactSuggestion[];
-  onClose: () => void;
-}) {
+export function NewMessage({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  // Fetched when the modal opens rather than passed down: the address book was
+  // previously built on every render of the app page and serialized into the
+  // RSC payload, including the overwhelming majority of renders where nobody
+  // opens this. Typing is usable immediately — an address typed in full is
+  // always accepted, so the list only ever accelerates the common case.
+  const [contacts, setContacts] = useState<ContactSuggestion[]>([]);
   const [query, setQuery] = useState("");
   const [recipient, setRecipient] = useState<string | null>(null);
   const [body, setBody] = useState("");
   const [fullEmail, setFullEmail] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const res = await fetch("/api/contacts/suggestions");
+        if (!active || !res.ok) return;
+        const json = await res.json();
+        if (active) setContacts(json.suggestions ?? []);
+      } catch {
+        // Suggestions are an accelerator, not a requirement — a full address
+        // typed by hand works with or without them, so a failure here stays
+        // silent rather than interrupting composing.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();

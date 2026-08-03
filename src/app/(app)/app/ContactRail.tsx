@@ -4,7 +4,6 @@ import { MoreLinks } from "@/components/chrome/MoreLinks";
 import { railTimestamp } from "@/lib/format";
 import type { ContactTab } from "@/lib/types";
 import { NewMessageButton } from "./NewMessageButton";
-import type { ContactSuggestion } from "./NewMessage";
 import { ThreadRowMenu } from "./ThreadRowMenu";
 import { ThreadSelectionMenu } from "./ThreadSelectionMenu";
 
@@ -50,7 +49,6 @@ export function ContactRail({
   threads,
   selectedId,
   activeTab,
-  contactSuggestions,
   className = "w-[320px] shrink-0",
   hasMore = false,
   loadingMore = false,
@@ -63,7 +61,6 @@ export function ContactRail({
   threads: RailThread[];
   selectedId: string | null;
   activeTab: ContactTab;
-  contactSuggestions: ContactSuggestion[];
   /** Sizing override — the mobile drawer fills its own panel instead of the fixed desktop width. */
   className?: string;
   /** Whether this tab has more threads beyond what's currently loaded. */
@@ -97,7 +94,7 @@ export function ContactRail({
       {/* Search lives in the top bar, where it spans both panes rather than
           looking scoped to the contact list. */}
       <div className="px-4 pb-2.5 pt-4">
-        <NewMessageButton contacts={contactSuggestions} />
+        <NewMessageButton />
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-4">

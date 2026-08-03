@@ -95,8 +95,6 @@ export default async function AppPage({
     { data: contactCountsRow },
     { data: companyCountsRow },
     { data: spamCountsRow },
-    { data: contactRows },
-    { data: readRows },
     { data: profileRow },
     { count: sentCount },
     { count: trashCount },
@@ -136,12 +134,6 @@ export default async function AppPage({
     supabase.rpc("tab_counts", { p_tab: "contact" }).maybeSingle(),
     supabase.rpc("tab_counts", { p_tab: "company" }).maybeSingle(),
     supabase.rpc("tab_counts", { p_tab: "spam" }).maybeSingle(),
-    // Display names for participants, gathered during threading.
-    supabase.from("contacts").select("address, display_name, tab"),
-    // Per-thread read watermarks. Unread is derived by comparing these to each
-    // thread's last_message_at — no Gmail round-trip, and it follows the user
-    // across devices.
-    supabase.from("thread_reads").select("thread_id, last_read_at"),
     // The user's own profile — decides whether the Admin menu item exists,
     // and which tab_count_mode drives the badges below. RLS lets them read
     // their own row; the admin panel itself re-verifies is_admin separately.
@@ -165,15 +157,50 @@ export default async function AppPage({
     ...(spamThreadRows ?? []),
   ];
 
-  // Snippets only for the specific threads actually being rendered this page
-  // — not the whole mailbox. Skipped entirely when there's nothing to look
-  // up (a brand-new account with zero threads yet).
-  const { data: recentRows } =
-    threadRows.length > 0
-      ? await supabase.rpc("latest_thread_snippets", {
-          p_thread_ids: threadRows.map((t) => t.id),
-        })
-      : { data: [] };
+  const pageThreadIds = threadRows.map((t) => t.id);
+
+  // Every address appearing on this page of threads. Contacts are looked up
+  // for exactly these rather than for the whole address book — the labels are
+  // only ever asked for rows that are on screen.
+  const pageAddresses = [
+    ...new Set(
+      threadRows.flatMap(
+        (t) => (t as { participant_set: string[] | null }).participant_set ?? [],
+      ),
+    ),
+  ];
+
+  // Snippets and read watermarks, both only for the specific threads actually
+  // being rendered this page — not the whole mailbox. They can't join the
+  // first wave because they need the thread ids it returns, but they're
+  // independent of each other so they go out together. Skipped entirely when
+  // there's nothing to look up (a brand-new account with zero threads yet).
+  //
+  // thread_reads used to be an unbounded select in the first wave: one row per
+  // thread ever opened, fetched in full on every render and every 2-minute
+  // background refresh, only to answer a question about the ≤600 threads on
+  // screen. It also silently truncated at PostgREST's 1000-row cap, which
+  // would have quietly marked old threads unread once an account crossed it.
+  const [{ data: recentRows }, { data: readRows }, { data: contactRows }] =
+    pageThreadIds.length > 0
+      ? await Promise.all([
+          supabase.rpc("latest_thread_snippets", {
+            p_thread_ids: pageThreadIds,
+          }),
+          supabase
+            .from("thread_reads")
+            .select("thread_id, last_read_at")
+            .in("thread_id", pageThreadIds),
+          // Same reasoning as thread_reads: this was an unbounded select of
+          // every contact ever corresponded with, on every render, to label
+          // the handful of addresses actually on screen — and subject to the
+          // same silent 1000-row truncation.
+          supabase
+            .from("contacts")
+            .select("address, display_name")
+            .in("address", pageAddresses),
+        ])
+      : [{ data: [] }, { data: [] }, { data: [] }];
 
   // Canonicalized so `Kevincole@`, `kevin.cole@`, and `kevincole+tag@` all match
   // the connected account.
@@ -274,24 +301,9 @@ export default async function AppPage({
   const labelFor = (address: string) =>
     nameByAddress.get(address) || fallbackLabel(address) || address;
 
-  // Suggestions for the net-new compose combobox. Contacts first (real people),
-  // then everyone else, so the most likely recipients surface at the top.
-  const contactSuggestions = ((contactRows ?? []) as {
-    address: string;
-    display_name: string | null;
-    tab: ContactTab;
-  }[])
-    .filter((c) => c.tab !== "spam")
-    .sort((a, b) => {
-      if (a.tab !== b.tab) return a.tab === "contact" ? -1 : 1;
-      return (a.display_name || a.address).localeCompare(
-        b.display_name || b.address,
-      );
-    })
-    .map((c) => ({
-      address: c.address,
-      label: c.display_name || fallbackLabel(c.address) || c.address,
-    }));
+  // (Compose suggestions used to be built here and serialized into every
+  // render's payload, including the ones where nobody opens the compose box.
+  // They're fetched by the dialog now — GET /api/contacts/suggestions.)
 
   // A Brandfetch logo, but only for Company senders on a confident brand
   // domain — never people, never spam, never an ESP domain. Returns null
@@ -543,7 +555,6 @@ export default async function AppPage({
         railByTab={railByTab}
         initialCursors={initialCursors}
         selectedId={selected?.id ?? null}
-        contactSuggestions={contactSuggestions}
         serverThread={paneThread}
         serverMessages={paneMessages}
         serverOlderCursor={paneOlderCursor}

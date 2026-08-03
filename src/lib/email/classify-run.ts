@@ -60,21 +60,10 @@ export async function classifyUserMail(
   //    well, so trusting it made every counterparty look like the user: their
   //    mail counted as the user's own replies, and they were skipped when
   //    classifying senders. The From address, canonicalized, is authoritative.
-  const { data: accountRows, error: accountsError } = await admin
-    .from("email_accounts")
-    .select("email")
-    .eq("user_id", userId);
-  if (accountsError) throw accountsError;
-
-  const selfAddresses = new Set(
-    (accountRows ?? []).map((a) => canonicalAddress((a as { email: string }).email)),
-  );
-
-  const isFromSelf = (fromAddress: string | null): boolean => {
-    const [parsed] = parseAddressList(fromAddress ? [fromAddress] : null);
-    return parsed ? selfAddresses.has(canonicalAddress(parsed.address)) : false;
-  };
-
+  //    Read alongside the message/contact/thread queries below rather than
+  //    before them: nothing in those depends on it, and this runs on every
+  //    classify call — including one per backfill step, roughly once a second
+  //    during an import, where a serialized extra round-trip is pure cost.
   const contactsFilter = scope?.contactAddresses;
   const threadsFilter = scope?.threadIds;
 
@@ -96,6 +85,7 @@ export async function classifyUserMail(
     { data: messageRows, error: messagesError },
     { data: contacts, error: contactsError },
     { data: threads, error: threadsError },
+    { data: accountRows, error: accountsError },
   ] = await Promise.all([
     contactsFilter
       ? admin
@@ -140,10 +130,23 @@ export async function classifyUserMail(
           .from("threads")
           .select("id, participant_set, tab")
           .eq("user_id", userId),
+    admin.from("email_accounts").select("email").eq("user_id", userId),
   ]);
   if (messagesError) throw messagesError;
   if (contactsError) throw contactsError;
   if (threadsError) throw threadsError;
+  if (accountsError) throw accountsError;
+
+  const selfAddresses = new Set(
+    (accountRows ?? []).map((a) =>
+      canonicalAddress((a as { email: string }).email),
+    ),
+  );
+
+  const isFromSelf = (fromAddress: string | null): boolean => {
+    const [parsed] = parseAddressList(fromAddress ? [fromAddress] : null);
+    return parsed ? selfAddresses.has(canonicalAddress(parsed.address)) : false;
+  };
 
   type MessageRow = {
     from_address: string | null;

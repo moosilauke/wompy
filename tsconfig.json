@@ -11,6 +11,10 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // Test files run under `node --test --experimental-strip-types`, which
+    // resolves imports at runtime and therefore requires the real `.ts`
+    // extension in the specifier. Next's own bundler is unaffected.
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [

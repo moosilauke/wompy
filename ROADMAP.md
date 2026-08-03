@@ -103,6 +103,17 @@ Last updated: 2026-08-03
   and only the messages are fetched, from a scoped `/api/thread/[id]`. Bubbles
   arrive behind a skeleton. Mapping lives in `lib/email/pane.ts`, shared with
   the server-rendered path so the two can't drift
+- **Optimistic send** — the typed text used to sit frozen in the composer
+  across four sequential round-trips (auth, account lookup, the Gmail send, and
+  a second Gmail call to read the message back). Now the bubble appears and the
+  box clears on the same frame, then the real message quietly takes its place
+  (matched on Gmail's message id, so sending "ok" twice doesn't collapse into
+  one). A message in flight looks exactly like a sent one — deliberately: sends
+  essentially always succeed, and a "sending…" treatment would advertise the
+  latency rather than hide it. Only a genuine failure gets a treatment: the
+  bubble stays put, says "Not sent", and offers a retry, so nothing written is
+  ever lost or silently dropped. `/api/send` was also the last route still
+  paying `getUser()`'s ~120ms auth round-trip
 - **Stopped fetching `body_html` that's never used** — the pane query pulled
   both body columns for every message, but HTML is only needed for the ~28%
   with no `body_text`. It's ~91% of the bytes in a thread: the heaviest

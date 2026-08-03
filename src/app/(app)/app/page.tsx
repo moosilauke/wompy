@@ -17,6 +17,7 @@ import { type CompanyMessage } from "./CompanyPane";
 import { MessageListPane, type ListedMessage } from "./MessageListPane";
 import { ToastProvider } from "./Toasts";
 import { OptimisticReactionsProvider } from "./OptimisticReactions";
+import { PendingMessagesProvider } from "./PendingMessages";
 import { MarkThreadRead } from "./MarkThreadRead";
 import {
   isThreadView,
@@ -523,6 +524,7 @@ export default async function AppPage({
   return (
     <ToastProvider>
       <OptimisticReactionsProvider>
+      <PendingMessagesProvider>
       {/* Renders nothing; marks the SERVER-chosen conversation read — a cold
           load, a deep link, or back/forward. Conversations opened by clicking
           a rail row are handled by ThreadPane instead, since no server render
@@ -558,6 +560,7 @@ export default async function AppPage({
           <MessageListPane view={activeTab} messages={listedMessages} />
         ) : null}
       </AppShell>
+      </PendingMessagesProvider>
       </OptimisticReactionsProvider>
     </ToastProvider>
   );

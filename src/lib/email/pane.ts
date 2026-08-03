@@ -28,6 +28,8 @@ export const PANE_MESSAGE_LIMIT = 200;
 /** Shape both panes share; the two views pick different fields off it. */
 interface MappedMessage {
   id: string;
+  /** Lets an optimistic bubble recognize its own message when it lands. */
+  gmailMessageId: string | null;
   outgoing: boolean;
   subject: string | null;
   body: string | null;
@@ -41,6 +43,7 @@ interface MappedMessage {
 
 interface MessageRow {
   id: string;
+  gmail_message_id: string | null;
   from_address: string | null;
   subject: string | null;
   body_text: string | null;
@@ -66,7 +69,9 @@ export async function loadPaneMessages(
   // are fetched separately below.
   const { data: messageRows } = await supabase
     .from("messages")
-    .select("id, from_address, subject, body_text, snippet, internal_date")
+    .select(
+      "id, gmail_message_id, from_address, subject, body_text, snippet, internal_date",
+    )
     .eq("thread_id", threadId)
     .is("trashed_at", null)
     // Reactions render as badges on their target, not as their own bubbles.
@@ -168,6 +173,7 @@ export async function loadPaneMessages(
 
     return {
       id: m.id,
+      gmailMessageId: m.gmail_message_id,
       // The From address is the only reliable signal for "did I write this".
       // Gmail's SENT label is deliberately NOT consulted: when you correspond
       // with your own other accounts, it returns SENT on inbound messages too,

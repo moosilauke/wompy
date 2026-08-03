@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePendingMessages } from "./PendingMessages";
 
 const MAX_CHAT_LENGTH = 365;
 
@@ -16,43 +16,63 @@ const MAX_CHAT_LENGTH = 365;
 export function Composer({
   threadId,
   recipientLabel,
+  onSent,
 }: {
   threadId: string;
   recipientLabel: string;
+  /** Fires once the server confirms, so the pane can pull the real message
+   * in. Not a router.refresh(): the bubble is already on screen, and only
+   * this conversation's messages need re-reading. */
+  onSent?: () => void;
 }) {
-  const router = useRouter();
+  const { addPending, sendPending } = usePendingMessages();
   const [body, setBody] = useState("");
   const [fullEmail, setFullEmail] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const remaining = MAX_CHAT_LENGTH - body.length;
   const overLimit = !fullEmail && remaining < 0;
-  const canSend = body.trim().length > 0 && !overLimit && !sending;
+  // There is no "sending" state any more: the box empties the moment a send
+  // starts, so the button is already disabled by having nothing to send, and
+  // firing off two messages in a row is simply two sends in flight — the way a
+  // chat app behaves.
+  const canSend = body.trim().length > 0 && !overLimit;
 
-  async function send() {
+  function send() {
     if (!canSend) return;
-    setSending(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threadId, body, fullEmail }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(json?.detail ?? json?.error ?? "Couldn’t send.");
-        return;
-      }
-      setBody("");
-      setFullEmail(false);
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn’t send.");
-    } finally {
-      setSending(false);
-    }
+
+    // Everything the user typed is captured and the box is cleared BEFORE the
+    // request, so the bubble appears and the composer is ready for the next
+    // message on the same frame. Previously the text sat frozen in the
+    // textarea across four sequential round-trips.
+    const sentBody = body;
+    const sentFullEmail = fullEmail;
+    const tempId = `pending-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+    setBody("");
+    setFullEmail(false);
+
+    const message = {
+      tempId,
+      threadId,
+      body: sentBody,
+      sentAt: new Date().toISOString(),
+      fullEmail: sentFullEmail,
+    };
+
+    addPending(message);
+
+    // The same object is handed straight to the send rather than being looked
+    // up by id — the add above hasn't been applied to state yet in this tick,
+    // so a lookup would find nothing and silently skip the request.
+    //
+    // The provider owns the request so a retry on a failed bubble can re-run
+    // it without the composer (which may since have been unmounted, or moved
+    // to another conversation) being involved.
+    //
+    // No onError handler: a failure is reported on the bubble itself, next to
+    // the message it's about and next to the retry. An error line down here
+    // would be a second voice saying the same thing, detached from it.
+    void sendPending(message, { onSent });
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -65,10 +85,10 @@ export function Composer({
 
   return (
     <div className="shrink-0 px-4 pb-4 pt-3 md:px-8 md:pb-6 md:pt-4">
-      {error && (
-        <p className="mb-2 text-[12.5px] font-bold text-coral">{error}</p>
-      )}
-
+      {/* No error line here: a send that fails is reported on its own bubble,
+          with the retry, rather than by a banner detached from the message it
+          refers to. The character counter below is the only inline feedback
+          this box needs. */}
       <div className="flex items-end gap-2.5 rounded-[22px] border border-black/[0.06] bg-white py-2.5 pl-[18px] pr-3 shadow-[0_4px_18px_rgba(0,0,0,0.07)]">
         <textarea
           value={body}

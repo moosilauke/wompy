@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ReadingPane, type PaneMessage, type PaneThread } from "./ReadingPane";
 import { CompanyPane, type CompanyMessage } from "./CompanyPane";
 import { MarkThreadRead } from "./MarkThreadRead";
+import { mergePendingMessages, usePendingMessages } from "./PendingMessages";
 import type { RailThread } from "./ContactRail";
 import type { ContactTab } from "@/lib/types";
 
@@ -37,6 +38,8 @@ export function ThreadPane({
   openThread: RailThread | null;
   isSpam: boolean;
 }) {
+  const { pendingByThread, retryPending } = usePendingMessages();
+
   // Messages for the thread named by `loadedId`. The two move together so a
   // render can never pair one thread's id with another's messages.
   const [loaded, setLoaded] = useState<{
@@ -45,6 +48,10 @@ export function ThreadPane({
   } | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastOpenId, setLastOpenId] = useState<string | null>(null);
+  // Bumped to re-run the fetch for the SAME thread — after a send, so the real
+  // message replaces the optimistic bubble. Goes through the same effect (and
+  // therefore the same race guard) rather than being a second fetch path.
+  const [reloadToken, setReloadToken] = useState(0);
 
   // Guards against out-of-order responses: click A, click B, and if A's slower
   // request lands second its messages would replace B's. Only the newest
@@ -77,15 +84,27 @@ export function ThreadPane({
     void (async () => {
       try {
         const res = await fetch(`/api/thread/${openId}`);
-        // On failure, an empty pane beats leaving the previous conversation's
-        // messages up under this one's header.
-        const messages = res.ok ? ((await res.json()).messages ?? []) : [];
+        if (!active || id !== requestId.current) return;
+        if (!res.ok) {
+          // A failed RELOAD leaves what's on screen alone — the conversation
+          // is still the right one and its messages are still valid. Only a
+          // failed initial load empties the pane, where the alternative is
+          // showing the previous thread's messages under this one's header.
+          setLoaded((prev) =>
+            prev?.id === openId ? prev : { id: openId, messages: [] },
+          );
+          setLoading(false);
+          return;
+        }
+        const messages = (await res.json()).messages ?? [];
         if (!active || id !== requestId.current) return;
         setLoaded({ id: openId, messages });
         setLoading(false);
       } catch {
         if (!active || id !== requestId.current) return;
-        setLoaded({ id: openId, messages: [] });
+        setLoaded((prev) =>
+          prev?.id === openId ? prev : { id: openId, messages: [] },
+        );
         setLoading(false);
       }
     })();
@@ -93,7 +112,7 @@ export function ThreadPane({
     return () => {
       active = false;
     };
-  }, [openId]);
+  }, [openId, reloadToken]);
 
   // The clicked row wins over the server's until the server catches up.
   const thread: PaneThread | null = openThread
@@ -109,9 +128,20 @@ export function ThreadPane({
 
   // Only messages that belong to the thread actually on screen — the id pairing
   // is what makes a mismatch impossible rather than merely unlikely.
-  const shown = openThread
+  const base = openThread
     ? (loaded?.id === openThread.id ? loaded.messages : [])
     : serverMessages;
+
+  // Bubbles for messages sent this session that the server hasn't confirmed
+  // yet. Only the chat view gets these — Companies/Spam are one-directional
+  // and have no composer to send from.
+  const shown =
+    tab === "contact" && thread
+      ? mergePendingMessages(
+          base as PaneMessage[],
+          pendingByThread.get(thread.id),
+        )
+      : base;
 
   // Marks the open conversation read. Lives here rather than in page.tsx now
   // that opening one doesn't re-render the page: this is the only place that
@@ -129,6 +159,15 @@ export function ThreadPane({
           thread={thread}
           messages={shown as PaneMessage[]}
           loading={loading}
+          // Re-read the conversation once the server has the sent message, so
+          // the real one takes the optimistic bubble's place. No skeleton for
+          // this pass — the bubbles are already on screen.
+          onSent={() => setReloadToken((n) => n + 1)}
+          onRetry={(tempId) =>
+            void retryPending(tempId, {
+              onSent: () => setReloadToken((n) => n + 1),
+            })
+          }
         />
       </>
     );

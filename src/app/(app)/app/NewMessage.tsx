@@ -72,6 +72,10 @@ export function NewMessage({
         return;
       }
       onClose();
+      // A full refresh here, unlike replies (see Composer): a net-new message
+      // creates a thread the client has never seen, so there's no rail row to
+      // patch and no open conversation to paint a bubble into. The rail itself
+      // has to be rebuilt, which is exactly what this does.
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn’t send.");

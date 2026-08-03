@@ -14,6 +14,11 @@ import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
   id: string;
+  /** Gmail's id for the message. Carried so a bubble the user just sent
+   * optimistically can be matched against the server's copy of it when that
+   * arrives, and dropped rather than shown twice. Null for messages stored
+   * before this was selected. */
+  gmailMessageId?: string | null;
   /** True when the signed-in user sent it (right-aligned, spruce bubble). */
   outgoing: boolean;
   /** Excerpt shown in the bubble: quoted history and signature already removed. */
@@ -27,6 +32,11 @@ export interface PaneMessage {
   attachments: AttachmentInfo[];
   reactions: ReactionSummary[];
   sentAt: string | null;
+  /** Set only when a send actually FAILED, to the pending message's id so a
+   * retry can name it. A message in flight looks exactly like a sent one —
+   * sends nearly always succeed, and flagging the normal case would draw
+   * attention to the wait instead of covering it. */
+  failedToSend?: string;
 }
 
 export interface PaneThread {
@@ -55,6 +65,8 @@ export function ReadingPane({
   thread,
   messages,
   loading = false,
+  onSent,
+  onRetry,
 }: {
   thread: PaneThread | null;
   messages: PaneMessage[];
@@ -62,6 +74,10 @@ export function ReadingPane({
    * — the header, avatar, and composer render for real while the bubbles are
    * placeholders. */
   loading?: boolean;
+  /** Forwarded to the composer; fires once a sent message is on the server. */
+  onSent?: () => void;
+  /** Retries a message whose send failed, by its pending id. */
+  onRetry?: (tempId: string) => void;
 }) {
   if (!thread) {
     return (
@@ -164,6 +180,21 @@ export function ReadingPane({
                     outgoing={msg.outgoing}
                   />
                 </div>
+
+                {/* The only time a message's delivery is ever mentioned. A
+                    send that's merely in flight says nothing at all. */}
+                {msg.failedToSend && (
+                  <p className="mt-1 text-right text-[11.5px] font-semibold text-coral">
+                    Not sent.{" "}
+                    <button
+                      type="button"
+                      onClick={() => onRetry?.(msg.failedToSend!)}
+                      className="underline underline-offset-2 hover:no-underline"
+                    >
+                      Try again
+                    </button>
+                  </p>
+                )}
               </BubbleRow>
             </div>
           ))
@@ -171,7 +202,11 @@ export function ReadingPane({
       </ScrollToLatest>
       )}
 
-      <Composer threadId={thread.id} recipientLabel={thread.label} />
+      <Composer
+        threadId={thread.id}
+        recipientLabel={thread.label}
+        onSent={onSent}
+      />
     </section>
   );
 }

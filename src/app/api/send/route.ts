@@ -19,10 +19,13 @@ export async function POST(request: Request) {
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  // Local JWT verification, not getUser(): this route was the last one still
+  // paying an auth-server round-trip (~120ms), and it's on the send path where
+  // api/actions already documents that latency being "directly visible as
+  // click lag."
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (!userId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
   const { data: accounts, error: accountsError } = await admin
     .from("email_accounts")
     .select("*")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("provider", "gmail")
     .order("created_at", { ascending: true })
     .limit(1);
@@ -77,6 +80,14 @@ export async function POST(request: Request) {
     // Pull the sent message straight back in by id so it appears in the thread
     // immediately. Fetching by id (rather than running a sync) avoids the
     // watermark's second-granularity gap.
+    //
+    // Still awaited, deliberately. Deferring it would return sooner, but this
+    // is a second full Gmail round-trip whose whole job is to make the message
+    // real — and on serverless the function can be killed the moment the
+    // response is sent, so a floating promise here would sometimes silently
+    // not run, leaving the message missing until the next 2-minute poll. The
+    // caller doesn't wait on this route any more anyway: the composer paints
+    // its bubble optimistically and only reconciles when this responds.
     try {
       if (result.gmailMessageId) {
         await ingestMessageById(account, result.gmailMessageId);

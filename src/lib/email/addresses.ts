@@ -33,14 +33,27 @@ export function parseAddress(raw: string | null | undefined): ParsedAddress | nu
   if (angleStart !== -1 && angleEnd > angleStart) {
     const address = value.slice(angleStart + 1, angleEnd).trim().toLowerCase();
     const namePart = value.slice(0, angleStart).trim();
-    return {
-      address,
-      displayName: cleanDisplayName(namePart),
-    };
+    return isPlausibleAddress(address)
+      ? { address, displayName: cleanDisplayName(namePart) }
+      : null;
   }
 
-  // Bare address.
-  return { address: value.toLowerCase(), displayName: null };
+  // Bare address. Rejected unless it actually looks like one: a display-name
+  // fragment reaching this point (e.g. `"Cosgrave` from a mis-split header)
+  // would otherwise be stored as a contact and offered as a recipient. The
+  // splitter upstream is quote-aware now, but this is the last place that can
+  // tell an address from a scrap of text, so it checks rather than assumes.
+  const bare = value.toLowerCase();
+  return isPlausibleAddress(bare) ? { address: bare, displayName: null } : null;
+}
+
+/**
+ * Deliberately permissive — real addresses are stranger than any strict RFC
+ * subset — but it does require the one thing every address has: a local part,
+ * an `@`, and a domain containing a dot, with no whitespace anywhere.
+ */
+function isPlausibleAddress(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
 /** Strip surrounding quotes and collapse whitespace; empty becomes null. */

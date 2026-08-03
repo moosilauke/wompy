@@ -12,10 +12,10 @@ import { fallbackLabel } from "@/lib/email/addresses";
  * modal is never opened, and including every 2-minute background refresh. It
  * is only needed when someone actually starts a new message.
  *
- * Bounded, unlike the select it replaces: an unbounded read would silently
- * truncate at PostgREST's 1000-row cap anyway, so the limit is explicit and
- * the ordering deliberate — real people first, then everyone else, so the
- * likeliest recipients are the ones that survive the cut.
+ * Ordered by who the user actually corresponds with, not alphabetically —
+ * see the contact_suggestions RPC (migration 0028) for the ranking. Opening
+ * the box with three arbitrary names starting with "a" was no more useful
+ * than opening it empty.
  */
 const SUGGESTION_LIMIT = 500;
 
@@ -30,36 +30,22 @@ export async function GET() {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Spam senders are excluded outright — the compose box should never help
-  // someone write to an address they've quarantined.
-  const { data: rows } = await supabase
-    .from("contacts")
-    .select("address, display_name, tab")
-    .neq("tab", "spam")
-    .order("tab", { ascending: true })
-    .order("display_name", { ascending: true, nullsFirst: false })
-    .limit(SUGGESTION_LIMIT);
+  // Ranking (contacts before companies, replied-to first, then by volume and
+  // recency) and the spam/malformed-address exclusions all live in the RPC —
+  // it aggregates over threads, which isn't expressible as a PostgREST select.
+  const { data: rows } = await supabase.rpc("contact_suggestions", {
+    p_limit: SUGGESTION_LIMIT,
+  });
 
   const suggestions = (
     (rows ?? []) as {
       address: string;
       display_name: string | null;
-      tab: string;
     }[]
-  )
-    // "company" sorts before "contact" alphabetically, but real people are the
-    // likelier recipients, so the intended order is restored here rather than
-    // being expressed as a fragile SQL ordering.
-    .sort((a, b) => {
-      if (a.tab !== b.tab) return a.tab === "contact" ? -1 : 1;
-      return (a.display_name || a.address).localeCompare(
-        b.display_name || b.address,
-      );
-    })
-    .map((c) => ({
-      address: c.address,
-      label: c.display_name || fallbackLabel(c.address) || c.address,
-    }));
+  ).map((c) => ({
+    address: c.address,
+    label: c.display_name || fallbackLabel(c.address) || c.address,
+  }));
 
   return NextResponse.json({ suggestions });
 }

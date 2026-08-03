@@ -56,6 +56,9 @@ export function NewMessage({ onClose }: { onClose: () => void }) {
     };
   }, []);
 
+  // Before anything is typed, the first few are the people the user
+  // corresponds with most — the API returns them already ranked, so this is
+  // just the top of that list rather than an arbitrary alphabetical slice.
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return contacts.slice(0, 6);

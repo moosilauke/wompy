@@ -458,12 +458,49 @@ function indexHeaders(
   return out;
 }
 
+/**
+ * Split an address header into entries, respecting quoting.
+ *
+ * A plain `.split(",")` breaks on commas INSIDE quoted display names, which is
+ * how `"Cosgrave, Dan" <dan@x.com>` became two entries — the first of them,
+ * `"Cosgrave`, having no `@` at all and being stored as if it were an address.
+ * "Lastname, Firstname" is a common convention in corporate mail, so this
+ * wasn't rare: it produced 22 junk contacts in a single real mailbox.
+ *
+ * Commas within <angle brackets> are skipped for the same reason, though
+ * they're far rarer.
+ */
 function splitAddresses(value: string | undefined): string[] | null {
   if (!value) return null;
-  return value
-    .split(",")
-    .map((a) => a.trim())
-    .filter(Boolean);
+
+  const entries: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  let inAngle = false;
+
+  for (const ch of value) {
+    if (ch === '"' && !inAngle) {
+      inQuotes = !inQuotes;
+      current += ch;
+    } else if (ch === "<" && !inQuotes) {
+      inAngle = true;
+      current += ch;
+    } else if (ch === ">" && !inQuotes) {
+      inAngle = false;
+      current += ch;
+    } else if (ch === "," && !inQuotes && !inAngle) {
+      const entry = current.trim();
+      if (entry) entries.push(entry);
+      current = "";
+    } else {
+      current += ch;
+    }
+  }
+
+  const last = current.trim();
+  if (last) entries.push(last);
+
+  return entries.length > 0 ? entries : null;
 }
 
 /** Walk the MIME tree collecting the first text/plain and text/html parts. */

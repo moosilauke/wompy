@@ -21,8 +21,15 @@ import { serverEnv } from "@/lib/env";
  * then be sent to Google as a credential.
  *
  * Stored format is `v1:<iv>:<authTag>:<ciphertext>`, all base64url. The version
- * prefix is what makes key rotation possible later without guessing at how an
- * existing value was produced.
+ * prefix identifies the scheme (AES-256-GCM, this envelope shape) — it does not
+ * change on key rotation, since rotation swaps the key, not the format.
+ *
+ * Key rotation: `decryptToken` tries `TOKEN_ENCRYPTION_KEY` first, then
+ * `TOKEN_ENCRYPTION_KEY_PREVIOUS` if set, so rows re-encrypted at different
+ * times all keep decrypting during a rotation window. GCM's auth tag is the
+ * correctness check — the wrong key fails loudly instead of decrypting to
+ * garbage. See `scripts/rotate-token-key.mjs` for the migration that brings
+ * every row onto the new key so the previous one can be retired.
  */
 
 const VERSION = "v1";
@@ -31,36 +38,51 @@ const ALGORITHM = "aes-256-gcm";
 const IV_BYTES = 12;
 const KEY_BYTES = 32;
 
-let cachedKey: Buffer | null = null;
-
 /**
- * The encryption key, derived once per process.
- *
- * Accepts base64 or hex so operators aren't forced into one encoding, but
- * requires the decoded value to be exactly 32 bytes — a short key would
- * silently weaken every token, so it fails at startup instead.
+ * Decode a raw TOKEN_ENCRYPTION_KEY value (base64 or hex) into the 32-byte
+ * buffer AES-256 needs. Exported so the rotation script can decode both the
+ * current and previous key the same way this module does.
  */
-function getKey(): Buffer {
-  if (cachedKey) return cachedKey;
-
-  const raw = serverEnv.tokenEncryptionKey.trim();
-
-  let key: Buffer;
-  if (/^[0-9a-f]{64}$/i.test(raw)) {
-    key = Buffer.from(raw, "hex");
-  } else {
-    key = Buffer.from(raw, "base64");
-  }
+export function decodeKey(raw: string, envVarName: string): Buffer {
+  const trimmed = raw.trim();
+  const key = /^[0-9a-f]{64}$/i.test(trimmed)
+    ? Buffer.from(trimmed, "hex")
+    : Buffer.from(trimmed, "base64");
 
   if (key.length !== KEY_BYTES) {
     throw new Error(
-      `TOKEN_ENCRYPTION_KEY must decode to ${KEY_BYTES} bytes (got ${key.length}). ` +
+      `${envVarName} must decode to ${KEY_BYTES} bytes (got ${key.length}). ` +
         `Generate one with: openssl rand -base64 32`,
     );
   }
 
-  cachedKey = key;
   return key;
+}
+
+let cachedKey: Buffer | null = null;
+let cachedPreviousKey: Buffer | null | undefined;
+
+/** The current encryption key, derived once per process. All new writes use this. */
+function getKey(): Buffer {
+  if (!cachedKey) {
+    cachedKey = decodeKey(serverEnv.tokenEncryptionKey, "TOKEN_ENCRYPTION_KEY");
+  }
+  return cachedKey;
+}
+
+/**
+ * The previous key, if a rotation is in progress. `undefined` means "not
+ * derived yet", `null` means "derived, and none is configured" — distinct
+ * from each other so we only decode once either way.
+ */
+function getPreviousKey(): Buffer | null {
+  if (cachedPreviousKey === undefined) {
+    const raw = serverEnv.tokenEncryptionKeyPrevious;
+    cachedPreviousKey = raw
+      ? decodeKey(raw, "TOKEN_ENCRYPTION_KEY_PREVIOUS")
+      : null;
+  }
+  return cachedPreviousKey;
 }
 
 /** True when a stored value is already in the encrypted envelope format. */
@@ -91,12 +113,30 @@ export function encryptToken(plaintext: string | null | undefined): string | nul
   ].join(":");
 }
 
+function decryptWithKey(key: Buffer, ivPart: string, tagPart: string, dataPart: string): string {
+  const decipher = createDecipheriv(
+    ALGORITHM,
+    key,
+    Buffer.from(ivPart, "base64url"),
+  );
+  decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
+
+  return Buffer.concat([
+    decipher.update(Buffer.from(dataPart, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
+}
+
 /**
  * Decrypt a stored token.
  *
  * Values without the version prefix are returned as-is: rows written before
  * encryption existed are still plaintext, and refusing to read them would break
  * sync for every existing account. `npm run encrypt-tokens` migrates them.
+ *
+ * Tries the current key first, then `TOKEN_ENCRYPTION_KEY_PREVIOUS` (if set)
+ * so a key rotation in progress doesn't break rows that haven't been
+ * re-encrypted yet. See `scripts/rotate-token-key.mjs`.
  */
 export function decryptToken(stored: string | null | undefined): string | null {
   if (!stored) return null;
@@ -108,17 +148,14 @@ export function decryptToken(stored: string | null | undefined): string | null {
   }
 
   const [, ivPart, tagPart, dataPart] = parts;
-  const decipher = createDecipheriv(
-    ALGORITHM,
-    getKey(),
-    Buffer.from(ivPart, "base64url"),
-  );
-  decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
 
-  return Buffer.concat([
-    decipher.update(Buffer.from(dataPart, "base64url")),
-    decipher.final(),
-  ]).toString("utf8");
+  try {
+    return decryptWithKey(getKey(), ivPart, tagPart, dataPart);
+  } catch (err) {
+    const previousKey = getPreviousKey();
+    if (!previousKey) throw err;
+    return decryptWithKey(previousKey, ivPart, tagPart, dataPart);
+  }
 }
 
 /**

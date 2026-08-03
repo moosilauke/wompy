@@ -17,8 +17,14 @@ and what's next.
 
 OAuth tokens are encrypted at rest (AES-256-GCM). The key lives in
 `TOKEN_ENCRYPTION_KEY`, deliberately outside the database — keep it out of
-backups, and note that changing it makes existing tokens unreadable, requiring
-every user to reconnect.
+backups. If the key needs to be rotated (suspected leak, routine hygiene),
+set `TOKEN_ENCRYPTION_KEY_PREVIOUS` to the old value, `TOKEN_ENCRYPTION_KEY`
+to a freshly generated one, deploy, then run
+`npm run rotate-token-key -- --apply` to re-encrypt every row onto the new
+key before removing `TOKEN_ENCRYPTION_KEY_PREVIOUS`. See
+`scripts/rotate-token-key.mjs` for the full runbook. Rotating the key without
+this process (just swapping `TOKEN_ENCRYPTION_KEY` and redeploying) makes
+existing tokens unreadable, requiring every user to reconnect.
 
 ## Stack
 

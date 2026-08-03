@@ -10,6 +10,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "encrypt-tokens": "node scripts/encrypt-tokens.mjs",
+    "rotate-token-key": "node scripts/rotate-token-key.mjs",
     "backfill-from-canonical": "node scripts/backfill-from-canonical.mjs",
     "backfill-has-replied": "node scripts/backfill-has-replied.mjs"
   },

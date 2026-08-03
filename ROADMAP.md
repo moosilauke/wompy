@@ -100,6 +100,11 @@ Last updated: 2026-07-30
 - **OAuth tokens encrypted at rest** (AES-256-GCM, key in `TOKEN_ENCRYPTION_KEY`
   outside the database). Versioned envelope so the key can be rotated later;
   `npm run encrypt-tokens` migrates any legacy plaintext rows
+- **Key rotation path** — `TOKEN_ENCRYPTION_KEY_PREVIOUS` lets `decryptToken`
+  fall back to the old key during a rotation window (GCM's auth tag decides
+  which key is right, no guessing); `npm run rotate-token-key -- --apply`
+  re-encrypts every row onto the current key so the previous one can be
+  retired. Runbook in `README.md` and `scripts/rotate-token-key.mjs`
 - **Deployed and live** at www.wompymail.com (Netlify). No marketing has gone
   out yet — deliberate, per past experience that signups don't show up
   overnight regardless — but the app is reachable and functional for anyone
@@ -114,13 +119,6 @@ Last updated: 2026-07-30
 Being live (even unmarketed) changes what "urgent" means — anyone could sign
 up today, so gaps that were invisible in local dev are now real risk, not
 future risk.
-
-### 1. Key rotation path
-Tokens are encrypted, but there's no way to re-key without every user
-reconnecting. The `v1:` envelope prefix was designed for this — a rotation
-script would decrypt with the old key and re-encrypt with the new one. Still
-cheaper to build before there are many rows, and the row count could start
-growing at any time now that the app is live.
 
 ---
 

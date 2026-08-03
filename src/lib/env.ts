@@ -102,4 +102,13 @@ export const serverEnv = {
       process.env.TOKEN_ENCRYPTION_KEY,
     );
   },
+  /**
+   * The key being rotated away from. Set only while a rotation is in
+   * progress: it lets `decryptToken` still read rows that haven't been
+   * re-encrypted with the new `TOKEN_ENCRYPTION_KEY` yet. Remove once
+   * `scripts/rotate-token-key.mjs --apply` has re-encrypted every row.
+   */
+  get tokenEncryptionKeyPrevious() {
+    return process.env.TOKEN_ENCRYPTION_KEY_PREVIOUS ?? "";
+  },
 };

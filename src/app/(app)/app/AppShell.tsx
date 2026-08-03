@@ -6,7 +6,8 @@ import { TopBar } from "./TopBar";
 import { ContactRail, type RailThread } from "./ContactRail";
 import { MobileRailDrawer } from "./MobileRailDrawer";
 import { useThreadSelection } from "./useThreadSelection";
-import { RailMutationsProvider } from "./RailMutations";
+import { useMediaQuery, MD_BREAKPOINT } from "./useMediaQuery";
+import { RailMutationsProvider, type RemovedThread } from "./RailMutations";
 import type { ContactSuggestion } from "./NewMessage";
 import { isThreadView, type AppView, type ContactTab } from "@/lib/types";
 
@@ -83,6 +84,15 @@ export function AppShell({
   const router = useRouter();
   const [selectedTab, setSelectedTab] = useState<AppView>(initialTab);
   const [lastServerTab, setLastServerTab] = useState<AppView>(initialTab);
+
+  // The rail used to render TWICE — once inline for desktop, once inside the
+  // drawer for mobile — with only CSS hiding the irrelevant one. That doubled
+  // every row's cost (each carries a context menu subscribing to four
+  // contexts), so at 200 threads the app paid for 400. Only one is mounted
+  // now. The server guesses desktop: its branch is a plain inline sidebar,
+  // whereas the drawer's is fixed-position overlay chrome (backdrop, handle,
+  // body-scroll lock) that would visibly flash if SSR guessed it wrong.
+  const isDesktop = useMediaQuery(MD_BREAKPOINT, true);
 
   // Accumulated rail state, seeded from the server's first page per tab and
   // grown by loadMore. Reseeded whenever the server sends a fresh railByTab
@@ -201,17 +211,39 @@ export function AppShell({
   // loaded page"). Filters every tab rather than just the active one: a
   // multi-select move can send some threads to a tab the user isn't even
   // looking at.
-  const removeThreads = useCallback((threadIds: string[]) => {
-    if (threadIds.length === 0) return;
-    const ids = new Set(threadIds);
-    setThreadsByTab((prev) => {
-      const next = {} as Record<ContactTab, RailThread[]>;
-      for (const tab of Object.keys(prev) as ContactTab[]) {
-        next[tab] = prev[tab].filter((t) => !ids.has(t.id));
+  // Returns the rows it removed so the caller can put them back if the action
+  // fails — see RailMutations.tsx.
+  //
+  // The returned list is read from the CURRENT render's threadsByTab, not from
+  // inside the setState updater: React runs updaters lazily during the
+  // re-render, so anything collected in there would still be empty by the time
+  // this returned. Depending on threadsByTab means a new identity per rail
+  // change, which is fine — the value is captured at click time, and every
+  // caller invokes it and uses the result immediately.
+  const removeThreads = useCallback(
+    (threadIds: string[]): RemovedThread[] => {
+      if (threadIds.length === 0) return [];
+      const ids = new Set(threadIds);
+
+      const removed: RemovedThread[] = [];
+      for (const tab of Object.keys(threadsByTab) as ContactTab[]) {
+        for (const thread of threadsByTab[tab]) {
+          if (ids.has(thread.id)) removed.push({ tab, thread });
+        }
       }
-      return next;
-    });
-  }, []);
+
+      setThreadsByTab((prev) => {
+        const next = {} as Record<ContactTab, RailThread[]>;
+        for (const tab of Object.keys(prev) as ContactTab[]) {
+          next[tab] = prev[tab].filter((t) => !ids.has(t.id));
+        }
+        return next;
+      });
+
+      return removed;
+    },
+    [threadsByTab],
+  );
 
   // Applies a known change (e.g. read/unread) to specific thread ids
   // immediately — see RailMutations.tsx for why this can't be left to a
@@ -234,8 +266,37 @@ export function AppShell({
     [],
   );
 
+  // Puts optimistically-removed rows back when the action they were removed
+  // for fails (or is undone). Re-sorted by lastMessageAt so a restored row
+  // lands where it belongs rather than at the end — same ordering the server
+  // and mergeFreshRail use. Ids already present are left alone, so a restore
+  // racing a refresh that already re-delivered the row can't duplicate it.
+  const restoreThreads = useCallback((removed: RemovedThread[]) => {
+    if (removed.length === 0) return;
+    setThreadsByTab((prev) => {
+      const next = { ...prev };
+      for (const tab of Object.keys(prev) as ContactTab[]) {
+        const forTab = removed.filter((r) => r.tab === tab);
+        if (forTab.length === 0) continue;
+        const present = new Set(prev[tab].map((t) => t.id));
+        const missing = forTab
+          .filter((r) => !present.has(r.thread.id))
+          .map((r) => r.thread);
+        if (missing.length === 0) continue;
+        next[tab] = [...prev[tab], ...missing].sort((a, b) => {
+          const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+          const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+          return bt - at;
+        });
+      }
+      return next;
+    });
+  }, []);
+
   return (
-    <RailMutationsProvider value={{ removeThreads, patchThreads }}>
+    <RailMutationsProvider
+      value={{ removeThreads, patchThreads, restoreThreads }}
+    >
       <div className="flex h-screen flex-col overflow-hidden">
         <TopBar
           userEmail={userEmail}
@@ -246,10 +307,13 @@ export function AppShell({
           onSelectTab={selectTabWithClear}
         />
         <div className="flex min-h-0 flex-1">
-          {railTab && (
-            <>
-              {/* Desktop: inline sidebar, as always. */}
-              <div className="hidden md:flex">
+          {railTab &&
+            (isDesktop ? (
+              /* Desktop: inline sidebar, as always. Mounted only when the
+                 viewport is actually wide, so no `md:` hiding is needed —
+                 and none is wanted: it would blank the rail on a narrow
+                 viewport for the one render before hydration corrects. */
+              <div className="flex">
                 <ContactRail
                   threads={threadsByTab[railTab]}
                   selectedId={selectedId}
@@ -263,7 +327,8 @@ export function AppShell({
                   onSelectionDone={selection.clear}
                 />
               </div>
-              {/* Mobile: overlay drawer, so the reading pane is the default view. */}
+            ) : (
+              /* Mobile: overlay drawer, so the reading pane is the default view. */
               <MobileRailDrawer>
                 <ContactRail
                   threads={threadsByTab[railTab]}
@@ -279,8 +344,7 @@ export function AppShell({
                   onSelectionDone={selection.clear}
                 />
               </MobileRailDrawer>
-            </>
-          )}
+            ))}
           <div className="flex min-h-0 min-w-0 flex-1">{children}</div>
         </div>
       </div>

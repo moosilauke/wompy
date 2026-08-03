@@ -2,14 +2,13 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Bubble, BubbleRow, DayDivider } from "@/components/ui/Bubble";
 import { Composer } from "./Composer";
 import { MessageBody } from "./MessageBody";
-import { ReactionPicker } from "./ReactionPicker";
+import { BubbleReactionSlot } from "./BubbleReactionSlot";
 import { ScrollToLatest } from "./ScrollToLatest";
 import {
   AttachmentList,
   type AttachmentInfo,
 } from "@/components/ui/AttachmentChip";
 import { type ReactionSummary } from "@/components/ui/ReactionBadges";
-import { MessageReactions } from "./MessageReactions";
 import { bubbleTime, dayDividerLabel, dayKey } from "@/lib/format";
 
 export interface PaneMessage {
@@ -148,28 +147,12 @@ export function ReadingPane({
                     </MessageBody>
                   </Bubble>
 
-                  {/* Bottom-left, nudged up and in so it slightly overlaps the
-                      bubble — a reaction is a response TO the message, and the
-                      overlap reads as "attached to this one" rather than as a
-                      separate element. */}
-                  {/* Always mounted: a reaction the user adds optimistically
-                      may appear on a message that had none from the server. The
-                      component renders nothing when there's nothing to show. */}
-                  <div className="absolute -bottom-3 left-2.5 z-10">
-                    <MessageReactions
-                      messageId={msg.id}
-                      reactions={msg.reactions}
-                    />
-                  </div>
-
-                  {/* Only when the conversation's recipients can render
-                      reactions — otherwise sending would produce a plain email. */}
-                  {thread.canReact && (
-                    <ReactionPicker
-                      messageId={msg.id}
-                      outgoing={msg.outgoing}
-                    />
-                  )}
+                  <BubbleReactionSlot
+                    messageId={msg.id}
+                    reactions={msg.reactions}
+                    canReact={thread.canReact}
+                    outgoing={msg.outgoing}
+                  />
                 </div>
               </BubbleRow>
             </div>

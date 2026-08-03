@@ -3,7 +3,7 @@
 Working status and build order. Update this as things ship; it is the shared
 source of truth so decisions don't live only in chat history or a plan file.
 
-Last updated: 2026-07-30
+Last updated: 2026-08-03
 
 ---
 
@@ -89,6 +89,18 @@ Last updated: 2026-07-30
 - Client cache + instant client-side tab switching
 - Batched delete/undo (was one Gmail call per message at ~464ms each — a
   12-message thread took ~5.5s; now one request regardless of size)
+- **Optimistic mutations** — delete, mark read/unread, and move-to-tab apply to
+  the rail on click rather than after the server confirms, and roll back if the
+  request fails. Undo restores the row instantly too. Bulk multi-select
+  inherits all of it, since it delegates to the same three functions. Opening
+  an unread thread now patches the rail directly instead of triggering a
+  full-page `router.refresh()` for a one-field change
+- **Halved the rail's render cost** — the contact rail was being rendered twice
+  (inline for desktop, again inside the mobile drawer, with only CSS hiding the
+  irrelevant one), so 200 threads cost 400 rows, each carrying a context menu
+  subscribed to four contexts. Only the one matching the viewport mounts now.
+  Same idea for the reaction picker: it was mounted per message (200 client
+  components per thread) for a control invisible until hover
 
 **Auth & security**
 - Google sign-in no longer re-prompts for consent on every login; `prompt:
@@ -138,10 +150,19 @@ future risk.
   Account confirmation & password reset stay on Supabase's own token flows;
   point Supabase Auth SMTP at Mailtrap in the dashboard so they deliver
   reliably (config, not code). Future app-originated emails reuse the mailer.
-- **Continue performance enhancements** — delete is fixed (batched); next
-  candidates are per-thread message fetch and the full-mailbox reclassify that
-  runs on every sync
-- **Contact and contacts' messages multi-select** — ability, via keyboard (ctrl and shift-click) and GUI to select multiple contact conversations and/or select multiple messages/emails from a contact
+- **Continue performance enhancements** — delete is batched and the common
+  mutations are optimistic (see Shipped). The remaining latency is **opening a
+  conversation**: it's a full server navigation that re-runs the whole
+  `force-dynamic` page (~12 queries plus dependent waves) with no loading state,
+  so the click has no visible acknowledgment. Fix is a scoped
+  `/api/thread/[id]` route so the pane paints from rail data already held
+  client-side. Then optimistic send, and the serial `messages.get` loop in
+  `sync.ts` (backfill already solved this with a worker pool).
+  Note: "the full-mailbox reclassify on every sync" was listed here for a
+  while — it's already fixed; `ClassifyScope` made classification incremental
+- **Contacts' messages multi-select** — rail conversation multi-select shipped
+  (ctrl/shift-click, bulk mark read/unread, move, delete). Still to do:
+  selecting multiple individual messages within one contact's conversation
 - **Create groups** — net new messages only allow selecting one recipient currently vs multiple
 - **Add forwarding** — ability to forward a message to another contact(s)
 - **Special handling of some attachment types** — e.g. for images, preview in modal overlay vs ONLY download (maybe even display thumbnail too?); for calendar invites, option to open in the same calendar as the email provider (e.g. if syncing Gmail, then ICS opens Google Calendar to add calendar invite automatically)

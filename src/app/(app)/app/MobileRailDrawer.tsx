@@ -8,8 +8,10 @@ const EDGE_SWIPE_ZONE = 24; // px from the left edge that starts a drag
 /**
  * Mobile presentation of the contact rail: a swipeable overlay drawer rather
  * than a permanent sidebar, so the reading pane can be the default mobile
- * view. Desktop is unaffected — `AppShell` only renders this below `md`, and
- * renders `ContactRail` inline (no drawer chrome) at `md` and up.
+ * view. Desktop is unaffected — `AppShell` genuinely only mounts this below
+ * `md` (via useMediaQuery), rendering `ContactRail` inline at `md` and up.
+ * The `md:hidden` classes below are therefore belt-and-braces, covering the
+ * frame between a resize past the breakpoint and React unmounting this.
  *
  * A small handle is always visible, riding the drawer's leading edge when
  * closed (hinting it can be pulled out, caret pointing in) and its trailing

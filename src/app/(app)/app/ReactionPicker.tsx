@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useMessageActions } from "./useMessageActions";
 
 /**
@@ -11,6 +10,10 @@ import { useMessageActions } from "./useMessageActions";
  * render reactions — a picker that sends a plain email would be a trap, so the
  * affordance simply isn't there when it wouldn't work. (The server re-checks
  * regardless; the UI is not the enforcement point.)
+ *
+ * Open state is controlled by BubbleReactionSlot, which mounts this only while
+ * the bubble is hovered — it needs to know when the emoji row is open so it
+ * can keep this mounted while the pointer travels to an emoji.
  */
 
 const QUICK_EMOJI = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏"];
@@ -18,15 +21,18 @@ const QUICK_EMOJI = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏"];
 export function ReactionPicker({
   messageId,
   outgoing = false,
+  open,
+  onOpenChange,
 }: {
   messageId: string;
   outgoing?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const { react } = useMessageActions();
 
   const choose = (emoji: string) => {
-    setOpen(false);
+    onOpenChange(false);
     void react(messageId, emoji);
   };
 
@@ -55,10 +61,11 @@ export function ReactionPicker({
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => onOpenChange(true)}
           aria-label="Add reaction"
-          // Hidden until the row is hovered (group-hover on the bubble wrapper),
-          // so the chat stays uncluttered.
+          // Still faded in via group-hover rather than appearing instantly:
+          // this only mounts on hover now, but the transition is what keeps it
+          // from popping into place under the pointer.
           className="flex h-6 w-6 items-center justify-center rounded-full border border-black/[0.08] bg-white text-[15px] leading-none text-text-muted opacity-0 shadow-[0_2px_8px_rgba(0,0,0,0.12)] transition-opacity group-hover:opacity-100 hover:text-text-body"
         >
           ☺

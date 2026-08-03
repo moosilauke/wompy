@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from "react";
 import type { RailThread } from "./ContactRail";
+import type { ContactTab } from "@/lib/types";
 
 /**
  * Lets a deeply-nested action (ThreadRowMenu/ThreadSelectionMenu's mark
@@ -21,16 +22,34 @@ import type { RailThread } from "./ContactRail";
  * the rail immediately, rather than waiting on a refresh that may never
  * touch that row again.
  */
+/** A row lifted out of the rail, remembered with the tab it came from so it
+ * can be put back exactly where it was. */
+export interface RemovedThread {
+  tab: ContactTab;
+  thread: RailThread;
+}
+
 interface RailMutationsValue {
   /** Remove these thread ids from every tab's accumulated rail list at once —
    * the caller already knows which ids just got trashed/moved, not which tab
-   * each one lived in. */
-  removeThreads: (threadIds: string[]) => void;
+   * each one lived in.
+   *
+   * Returns what it removed. Callers remove optimistically (before the server
+   * confirms), so they need this to undo the removal if the request fails —
+   * and only this function knows which tab each row was living in. */
+  removeThreads: (threadIds: string[]) => RemovedThread[];
   /** Apply a partial update to specific thread ids, wherever they currently
    * live across tabs — e.g. flipping `unread` after a manual mark read/unread,
    * which a background refresh can no longer be relied on to do for a thread
    * outside the server's fresh first page. */
   patchThreads: (threadIds: string[], patch: Partial<RailThread>) => void;
+  /** Put rows removed by removeThreads back where they came from.
+   *
+   * The counterpart to an optimistic removeThreads: actions now hide the row
+   * the moment they're clicked rather than after the server confirms, so a
+   * failed request (or an Undo) has to restore what was optimistically taken
+   * away. Takes removeThreads' return value verbatim. */
+  restoreThreads: (removed: RemovedThread[]) => void;
 }
 
 const Context = createContext<RailMutationsValue | null>(null);
@@ -44,8 +63,9 @@ export const RailMutationsProvider = Context.Provider;
 export function useRailMutations(): RailMutationsValue {
   return (
     useContext(Context) ?? {
-      removeThreads: () => {},
+      removeThreads: () => [],
       patchThreads: () => {},
+      restoreThreads: () => {},
     }
   );
 }

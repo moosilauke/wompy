@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Avatar } from "./Avatar";
 
 /**
@@ -7,8 +8,14 @@ import { Avatar } from "./Avatar";
  * ThreadRowMenu (delete, mark read); the landing page renders it inert. Keeping
  * the row's layout here means the rail looks identical in both without the
  * landing page carrying any action code.
+ *
+ * Memoized because AppShell (a client component) renders the whole rail, so
+ * any state change there — a mark-read patch, a multi-select click, a toast —
+ * re-renders every row. All props are primitives, and patchThreads
+ * deliberately preserves object identity for untouched rows, so the shallow
+ * compare actually holds and only the rows that changed re-render.
  */
-export function RailRow({
+function RailRowImpl({
   address,
   label,
   timestamp,
@@ -86,3 +93,5 @@ export function RailRow({
     </span>
   );
 }
+
+export const RailRow = memo(RailRowImpl);

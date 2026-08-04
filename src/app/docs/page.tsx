@@ -73,6 +73,28 @@ export default async function DocsPage() {
           </section>
 
           <section>
+            <h2>Seeing the original email</h2>
+            <p>
+              Wompy shows you the message and strips the cruft — quoted reply
+              chains, signatures, and the layout scaffolding most email is
+              wrapped in. Links stay clickable, and open in a new tab.
+            </p>
+            <p>
+              The original isn&rsquo;t lost. Right-click any message and choose{" "}
+              <strong>View original</strong> to see it exactly as its sender
+              built it, with their images, colours, and layout intact.
+            </p>
+            <p>
+              Images in that view are blocked until you ask for them. Loading
+              an image tells the sender you opened the message and when — many
+              marketing emails include an invisible one purely to track that.
+              Click <strong>Show images</strong> when you want them, or turn on{" "}
+              <strong>Always load images</strong> in Settings if you&rsquo;d
+              rather mail always looked as designed.
+            </p>
+          </section>
+
+          <section>
             <h2>Reactions</h2>
             <p>
               Hover or long-press a message bubble to react to it, the same

@@ -54,7 +54,27 @@ Last updated: 2026-08-03
 - Read/unread — Wompy-native, a per-thread read watermark in Supabase. No Gmail
   round-trip on mark-read; state follows the user across devices and is
   independent of Gmail's own read state
-- Message excerpting: quoted history + signature stripped, full text in a modal
+- Message excerpting: quoted history + signature stripped, original in a modal
+- **"View original"** — the stripped excerpt stays the default view; right-click
+  any message to see it as its sender built it, rendered from the real HTML.
+  Two independent defences, because 98% of mail is HTML and the corpus contains
+  live `<script>`, inline handlers and `javascript:` URLs: server-side
+  sanitizing (`lib/email/sanitize-html.ts`, allowlist-based, with tests), then
+  a sandboxed iframe with no `allow-scripts` and no `allow-same-origin`, so a
+  sanitizer bypass still can't execute or reach the session. A frame rather
+  than injected markup because 65% of messages carry a `<style>` block that
+  would otherwise leak into the app's own CSS
+- **Remote images blocked by default**, with one-click "Show images" and a
+  Settings preference to always load them. Blanket, not a 1x1-pixel filter:
+  the sender declares the dimensions, so a tracker just writes `width="100"`
+  and serves a 1x1. Measured here — 1,551 messages carry a remote image while
+  declaring no 1x1 anywhere, 2,386 size via CSS, 1,185 use `display:none`, and
+  669 track via a CSS `background-image` that isn't an `<img>` at all
+- **Clickable links in the normal view** — `htmlToText` used to drop every
+  `href`, so "Click here" arrived with no destination. Labels and URLs are now
+  both preserved and rendered as real `<a>` elements (split into React
+  children, never injected). Long bare URLs are abbreviated for display while
+  the href stays whole
 - HTML-only mail converted to readable text (41% of the corpus)
 - Search: people (trigram) + messages (Postgres FTS over excerpted bodies)
 - Attachments: inline chips in the bubble, downloaded from Gmail on demand
@@ -187,10 +207,9 @@ Being live (even unmarketed) changes what "urgent" means — anyone could sign
 up today, so gaps that were invisible in local dev are now real risk, not
 future risk.
 
-Nothing is currently blocking. The performance push is done and the app feels
-fast; what follows is a judgement call about what the product needs next
-rather than a queue. Three candidates, roughly in order of how often they'd
-bite a real user:
+Nothing is currently blocking. The performance push is done, rich HTML now has
+a home in "View original", and the app feels fast; what follows is a judgement
+call about what the product needs next rather than a queue.
 
 ### 1. Spam false-positive escape
 A quarantined sender can only be rescued by replying to them in Gmail — i.e.
@@ -199,16 +218,22 @@ by leaving Wompy. Manual override already exists for Contacts/Companies
 plus deciding whether rescuing a sender should also un-quarantine their
 existing mail.
 
-### 2. Settings/profile page
-Enough deferred preferences have accumulated to justify building it (tab
-badge counts, and anything else that's been parked). Also the natural home for
-provider config and, later, subscription status.
+### 2. Site-wide CSP
+Deliberately deferred from the "View original" work so a CSP misconfiguration
+couldn't break email rendering, and vice versa. The sandbox already provides
+that feature's isolation; this is general hardening. Use static `headers()` in
+`next.config.ts`, **not** nonces — the Next 16 docs warn nonces force every
+page dynamic, which would break the statically-rendered landing page. Needs
+`frame-src 'self'` or the `srcdoc` iframe is blocked. Fold in
+`X-Content-Type-Options: nosniff` while there: the attachments route serves
+sender-controlled `Content-Type` without it today.
 
-### 3. Display richer HTML mail
-41% of the corpus is HTML-only and currently rendered as converted text. This
-is the biggest remaining gap between Wompy and what people expect from a mail
-client — but it needs a sanitizer and a considered position on remote images
-(loading them signals that mail was opened), so it's the largest of the three.
+### 3. `cid:` inline images
+471 messages (6%) reference inline images that currently render as alt text.
+Blocked by design rather than effort: `attachments.ts` reads `Content-ID` only
+to filter inline parts *out*, and no column stores it, so there is nothing to
+resolve against. Needs a migration, inverting `isInline`, and relaxing
+`Content-Disposition: attachment` — which is a deliberate XSS control.
 
 ---
 
@@ -256,7 +281,8 @@ client — but it needs a sanitizer and a considered position on remote images
   otherwise
 - `staleTimes` is an experimental Next flag; revisit when it stabilizes
 
-(Spam false-positive escape, the settings page, and rich HTML mail moved up to
+(Rich HTML mail shipped as "View original" — see Shipped. The Settings page
+exists and now carries two preferences. Spam false-positive escape is still in
 **Next up**.)
 
 ---

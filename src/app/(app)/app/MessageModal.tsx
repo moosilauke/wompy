@@ -136,9 +136,33 @@ export function MessageModal({
 
   const canShowImages = html !== null && !imagesShown && blockedImageCount > 0;
 
+  // Sized for where this is going, not where it currently is: the panel takes
+  // its full size while still loading, so the common case (the message has
+  // HTML — 98% of them do) doesn't visibly jump from a small text box to a
+  // large frame a moment later. It settles back only when the HTML genuinely
+  // isn't coming, which is the rare case and reads as a deliberate fallback.
+  const renderingHtml = shownHtml !== null || loading;
+
   return (
-    <Modal open={open} onClose={onClose} label={title} maxWidth={720}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      label={title}
+      // Email is conventionally authored at 600px; 860 leaves room for that
+      // plus the modal's own padding without the design floating in whitespace.
+      maxWidth={renderingHtml ? 860 : 680}
+      fill={renderingHtml}
+    >
       <ModalHeader title={title} subtitle={subtitle} onClose={onClose} />
+
+      {/* A thin progress line rather than a message in the body: the text is
+          already readable underneath, so this says "more is coming" without
+          moving anything or implying the content is missing. */}
+      {loading && (
+        <div className="h-0.5 shrink-0 overflow-hidden bg-black/[0.06]">
+          <div className="h-full w-1/3 animate-pulse bg-spruce/40" />
+        </div>
+      )}
 
       {canShowImages && (
         <div className="flex items-center justify-between gap-3 border-b border-black/[0.06] bg-cream px-6 py-2.5">
@@ -156,15 +180,12 @@ export function MessageModal({
       )}
 
       {shownHtml === null ? (
-        <div className="overflow-y-auto px-6 py-5">
+        // `min-h-0 flex-1` so this scrolls within the panel rather than
+        // overflowing it while the panel is in fill mode (i.e. still loading).
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <p className="whitespace-pre-wrap break-words text-[14.5px] leading-[1.6] text-text-body">
             {body}
           </p>
-          {loading && (
-            <p className="mt-3 text-[12.5px] text-text-muted-3">
-              Loading the original…
-            </p>
-          )}
         </div>
       ) : (
         <iframe

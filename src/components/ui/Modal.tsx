@@ -16,6 +16,7 @@ export function Modal({
   onClose,
   label,
   maxWidth = 680,
+  fill = false,
   children,
 }: {
   open: boolean;
@@ -23,6 +24,9 @@ export function Modal({
   /** Accessible name for the dialog. */
   label: string;
   maxWidth?: number;
+  /** Take a fixed share of the viewport rather than hugging the content — for
+   * bodies that size themselves from the parent, like an iframe. */
+  fill?: boolean;
   children: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -67,7 +71,14 @@ export function Modal({
         // Stop clicks inside the panel from reaching the backdrop's handler.
         onClick={(e) => e.stopPropagation()}
         style={{ maxWidth }}
-        className="flex max-h-[85vh] w-full flex-col overflow-hidden rounded-[18px] bg-white shadow-[0_24px_60px_rgba(0,0,0,0.28)]"
+        // `fill` gives the panel a real height instead of letting it hug its
+        // content. Needed whenever a child sizes itself from the parent — an
+        // iframe has no intrinsic height, so under max-height alone the flex
+        // column has nothing to divide and collapses to a sliver. Content-sized
+        // modals (the plain-text body) still want the default.
+        className={`flex w-full flex-col overflow-hidden rounded-[18px] bg-white shadow-[0_24px_60px_rgba(0,0,0,0.28)] ${
+          fill ? "h-[85vh]" : "max-h-[85vh]"
+        }`}
       >
         {children}
       </div>

@@ -34,8 +34,10 @@ export interface CompanyThread {
  * the chat view, which hides them), and nothing is truncated or stripped. This
  * is where receipts, newsletters, and one-directional mail live.
  *
- * `body_html` is still never injected — untrusted remote content. HTML-only mail
- * falls back to its snippet with a marker until the sanitizing/stripping step.
+ * Cards render text and never inject `body_html` into the app's DOM. This is
+ * also the tab where "View original" matters most — newsletters and receipts
+ * are the graphical mail — and it renders the sender's real HTML sanitized,
+ * inside a sandboxed frame (see MessageModal).
  */
 export function CompanyPane({
   thread,
@@ -45,6 +47,7 @@ export function CompanyPane({
   hasOlder = false,
   loadingOlder = false,
   olderCount = 0,
+  alwaysLoadImages = false,
   onLoadOlder,
 }: {
   thread: CompanyThread | null;
@@ -57,6 +60,8 @@ export function CompanyPane({
   hasOlder?: boolean;
   loadingOlder?: boolean;
   olderCount?: number;
+  /** Settings preference, forwarded to each message's "View original" modal. */
+  alwaysLoadImages?: boolean;
   onLoadOlder?: () => void;
 }) {
   if (!thread) {
@@ -133,6 +138,7 @@ export function CompanyPane({
                 <CompanyCard
                   message={msg}
                   threadLabel={thread.label}
+                  alwaysLoadImages={alwaysLoadImages}
                 />
               </li>
             ))}

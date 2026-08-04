@@ -19,9 +19,12 @@ import type { CompanyMessage } from "./CompanyPane";
 export function CompanyCard({
   message,
   threadLabel,
+  alwaysLoadImages = false,
 }: {
   message: CompanyMessage;
   threadLabel: string;
+  /** Settings preference, forwarded to the modal. */
+  alwaysLoadImages?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -29,7 +32,7 @@ export function CompanyCard({
     <>
       <MessageMenu
         messageId={message.id}
-        onShowFull={message.truncated ? () => setOpen(true) : undefined}
+        onShowFull={() => setOpen(true)}
       >
         <div className="rounded-[14px] border border-black/[0.06] bg-white p-4 shadow-[0_2px_8px_rgba(0,0,0,0.05)]">
           <div className="mb-1.5 flex items-baseline justify-between gap-4">
@@ -47,7 +50,7 @@ export function CompanyCard({
 
           {message.htmlOnly && (
             <p className="mt-2 text-[11px] text-text-muted-3">
-              HTML email — preview only
+              Formatted email — right-click to view the original
             </p>
           )}
 
@@ -64,9 +67,11 @@ export function CompanyCard({
       <MessageModal
         open={open}
         onClose={() => setOpen(false)}
+        messageId={message.id}
         title={message.subject ?? "(no subject)"}
         subtitle={threadLabel}
         body={message.fullBody}
+        alwaysLoadImages={alwaysLoadImages}
       />
     </>
   );

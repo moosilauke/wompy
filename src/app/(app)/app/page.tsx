@@ -137,7 +137,10 @@ export default async function AppPage({
     // The user's own profile — decides whether the Admin menu item exists,
     // and which tab_count_mode drives the badges below. RLS lets them read
     // their own row; the admin panel itself re-verifies is_admin separately.
-    supabase.from("profiles").select("is_admin, tab_count_mode").maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("is_admin, tab_count_mode, always_load_images")
+      .maybeSingle(),
     // Counts only — head:true skips returning the rows themselves, since these
     // just drive the badges in the More menu.
     supabase
@@ -273,6 +276,11 @@ export default async function AppPage({
   const tabCountMode: TabCountMode =
     (profileRow as { tab_count_mode: TabCountMode } | null)?.tab_count_mode ??
     "unread_messages";
+  // Whether "View original" loads remote images without asking first
+  // (Settings › Preferences). Off unless the user chose otherwise.
+  const alwaysLoadImages = Boolean(
+    (profileRow as { always_load_images: boolean } | null)?.always_load_images,
+  );
   type TabCountsRow = {
     threads: number;
     messages: number;
@@ -558,6 +566,7 @@ export default async function AppPage({
         serverThread={paneThread}
         serverMessages={paneMessages}
         serverOlderCursor={paneOlderCursor}
+        alwaysLoadImages={alwaysLoadImages}
       >
         {/* Sent and Trash cut across threads, so they replace the pane with a
             flat list. The thread views' panes are rendered by AppShell itself,

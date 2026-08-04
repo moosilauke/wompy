@@ -21,7 +21,10 @@ import { loadPaneMessages } from "@/lib/email/pane";
  *
  * Mapping (excerpting, outgoing detection, HTML-to-text) lives in
  * lib/email/pane.ts, shared with the server-rendered path so the two can't
- * drift — in particular, body_html never reaches the client from either.
+ * drift — in particular, neither returns body_html. The original HTML has its
+ * own route, /api/messages/[id]/html, which serves ONE message at a time after
+ * sanitizing it; keeping the two separate is what preserves the ~91%-of-bytes
+ * saving that excluding body_html from the thread query buys.
  *
  * All reads go through the RLS-scoped client rather than the admin client:
  * this only ever needs the caller's own rows, and RLS is what enforces that a

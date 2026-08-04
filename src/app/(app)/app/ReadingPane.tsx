@@ -57,9 +57,10 @@ export interface PaneThread {
  * from, and a soft shadow — outgoing ones tinted spruce to match their fill.
  * Timestamps sit just outside the bubble, per the design reference.
  *
- * Body rendering deliberately never injects `body_html` — it's untrusted remote
- * content, and the MVP plan calls for stripping images/signatures before display.
- * HTML-only mail shows its snippet with a marker until those rules are built.
+ * Bubbles render the stripped excerpt as text and never inject `body_html` —
+ * a sender's markup must not reach the app's own DOM. The original layout is
+ * one right-click away in "View original", which renders it sanitized inside a
+ * sandboxed frame (see MessageModal).
  */
 export function ReadingPane({
   thread,
@@ -70,6 +71,7 @@ export function ReadingPane({
   hasOlder = false,
   loadingOlder = false,
   olderCount = 0,
+  alwaysLoadImages = false,
   onLoadOlder,
 }: {
   thread: PaneThread | null;
@@ -88,6 +90,8 @@ export function ReadingPane({
   /** How many messages came from paging backwards — lets the scroll container
    * hold position when they're prepended. */
   olderCount?: number;
+  /** Settings preference, forwarded to each message's "View original" modal. */
+  alwaysLoadImages?: boolean;
   onLoadOlder?: () => void;
 }) {
   if (!thread) {
@@ -181,9 +185,9 @@ export function ReadingPane({
                       messageId={msg.id}
                       excerpt={msg.body ?? ""}
                       full={msg.fullBody}
-                      truncated={msg.truncated}
                       title={msg.outgoing ? "Your message" : thread.label}
                       subtitle={dayDividerLabel(msg.sentAt)}
+                      alwaysLoadImages={alwaysLoadImages}
                     >
                       {msg.htmlOnly && (
                         <p
@@ -191,7 +195,7 @@ export function ReadingPane({
                             msg.outgoing ? "text-white/60" : "text-text-muted-3"
                           }`}
                         >
-                          HTML email — preview only
+                          Formatted email — right-click to view the original
                         </p>
                       )}
                       <AttachmentList

@@ -35,7 +35,12 @@ export function MessageMenu({
             // more descriptive but meant the item changed width and reading
             // between messages — a menu is learned by position and phrasing, so
             // predictability beats precision here.
-            label: "View full message",
+            //
+            // Renamed from "View full message" when the modal started rendering
+            // the sender's actual HTML: it now shows the email as designed, not
+            // merely untrimmed text, and "View original" is both the term of art
+            // and the more accurate description. Still one fixed string.
+            label: "View original",
             onSelect: onShowFull,
           },
         ]

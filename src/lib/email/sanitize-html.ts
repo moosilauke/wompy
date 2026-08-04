@@ -52,7 +52,14 @@ export const MAX_HTML_BYTES = 1_000_000;
 export interface SanitizedEmail {
   /** A complete HTML document, ready for `srcdoc`. */
   html: string;
-  /** How many remote images were defused — drives the "Show images (N)" label. */
+  /**
+   * How many blocked images "Show images" would actually bring back — i.e.
+   * parked `<img>` srcs only.
+   *
+   * Deliberately NOT a count of everything defused: remote CSS `url()` values
+   * are replaced rather than parked, so they never return. Counting them here
+   * would make the button promise more images than it delivers.
+   */
   blockedImageCount: number;
 }
 
@@ -294,20 +301,17 @@ export function sanitizeEmailHtml(
       // likely to be an attack.
       /(<style\b[^>]*>)([\s\S]*?)(<\/style>|$)/gi,
       (_m, open: string, css: string, close: string) => {
-        const { css: safeCss, blocked } = stripDangerousCss(css);
-        blockedImageCount += blocked;
-        return `${open}${safeCss}${close}`;
+        // Not added to blockedImageCount: these are replaced, not parked, so
+        // "Show images" cannot bring them back.
+        return `${open}${stripDangerousCss(css).css}${close}`;
       },
     );
 
     // inline style attributes
     out = out.replace(
       /style="([^"]*)"/gi,
-      (_m, css: string) => {
-        const { css: safeCss, blocked } = stripDangerousCss(css);
-        blockedImageCount += blocked;
-        return `style="${safeCss}"`;
-      },
+      // Same: neutralised rather than parked, so not counted.
+      (_m, css: string) => `style="${stripDangerousCss(css).css}"`,
     );
   } else {
     // Images allowed, but every SAFETY filter still applies — the preference

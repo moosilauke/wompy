@@ -6,6 +6,7 @@ import { lastSyncedLabel } from "@/lib/format";
 import { PageShell } from "@/components/chrome/PageShell";
 import { SettingsBackfillStatus } from "./SettingsBackfillStatus";
 import { TabCountModePicker } from "./TabCountModePicker";
+import { ImageLoadingPicker } from "./ImageLoadingPicker";
 import { type EmailAccount, type TabCountMode } from "@/lib/types";
 import type { BackfillJobStatus } from "@/lib/gmail/backfill";
 
@@ -41,12 +42,19 @@ export default async function SettingsPage() {
       .select("id, provider, email, last_synced_at")
       .order("created_at", { ascending: true }),
     currentUserIsAdmin(),
-    supabase.from("profiles").select("tab_count_mode").maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("tab_count_mode, always_load_images")
+      .maybeSingle(),
   ]);
 
-  const tabCountMode: TabCountMode =
-    (profileRow as { tab_count_mode: TabCountMode } | null)?.tab_count_mode ??
-    "unread_messages";
+  const prefs = profileRow as {
+    tab_count_mode: TabCountMode;
+    always_load_images: boolean;
+  } | null;
+
+  const tabCountMode: TabCountMode = prefs?.tab_count_mode ?? "unread_messages";
+  const alwaysLoadImages = prefs?.always_load_images ?? false;
 
   const connected = (accounts ?? []) as Pick<
     EmailAccount,
@@ -163,6 +171,19 @@ export default async function SettingsPage() {
               What the number next to Contacts, Companies, and Spam shows.
             </p>
             <TabCountModePicker initialMode={tabCountMode} />
+          </div>
+
+          <div className="mt-3 rounded-[14px] border border-black/[0.06] bg-white px-4 py-4">
+            <p className="mb-3 text-[14px] font-bold text-text-body">
+              Images in original messages
+            </p>
+            <p className="mb-3 text-[12.5px] text-text-muted-2">
+              Viewing an original email can load images from the sender&rsquo;s
+              servers, which tells them you opened it and when. Wompy blocks
+              them until you ask, unless you&rsquo;d rather mail always looked
+              as designed.
+            </p>
+            <ImageLoadingPicker initialEnabled={alwaysLoadImages} />
           </div>
         </section>
       </div>

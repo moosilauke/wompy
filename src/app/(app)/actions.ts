@@ -114,3 +114,35 @@ export async function updateTabCountMode(formData: FormData) {
   revalidatePath("/settings");
   revalidatePath("/app");
 }
+
+/**
+ * Whether "View original" loads remote images without asking (Settings ›
+ * Preferences).
+ *
+ * Off by default: a remote image's URL carries a per-recipient token, so
+ * loading one tells the sender that this person opened this message at this
+ * time. On means mail simply renders as designed, for people who would rather
+ * have that than the privacy. It governs images ONLY — sanitization is not
+ * affected by it, and must never be.
+ *
+ * Written via the admin client for the same reason as updateTabCountMode
+ * above: `profiles` has no authenticated-write RLS policy, deliberately, so a
+ * user can never touch `is_admin` on their own row (migration 0016).
+ */
+export async function updateAlwaysLoadImages(formData: FormData) {
+  const next = formData.get("enabled") === "true";
+
+  const supabase = await createClient();
+  const { data: claims } = await supabase.auth.getClaims();
+  const userId = claims?.claims?.sub;
+  if (typeof userId !== "string") return;
+
+  const admin = createAdminClient();
+  await admin
+    .from("profiles")
+    .update({ always_load_images: next })
+    .eq("id", userId);
+
+  revalidatePath("/settings");
+  revalidatePath("/app");
+}

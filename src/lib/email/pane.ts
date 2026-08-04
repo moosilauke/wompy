@@ -17,9 +17,16 @@ import type { ReactionSummary } from "@/components/ui/ReactionBadges";
  * whether an excerpt was truncated, whether body_html ever reaches the client).
  *
  * The security property this is responsible for: `body_html` is untrusted
- * remote content and never leaves the server. It's converted to text here, so
- * the client receives prose — no XSS surface, and no remote image loads
- * signalling that mail was opened.
+ * remote content, and NOTHING on this path ever sends it to the client. It's
+ * converted to text here, so the pane receives prose — no XSS surface, and no
+ * remote image loads signalling that mail was opened.
+ *
+ * The original HTML is reachable, but only through "View original", which is a
+ * separate path with its own defences: `/api/messages/[id]/html` sanitizes it
+ * (lib/email/sanitize-html.ts) and the client renders the result inside a
+ * sandboxed iframe with images blocked. That route fetches one message at a
+ * time, deliberately — see the note on the message query below for why this
+ * loader must never start selecting `body_html` in bulk.
  */
 
 /** Newest N kept, since a conversation is read from its most recent end. */

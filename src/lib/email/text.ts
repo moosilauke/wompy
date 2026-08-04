@@ -50,7 +50,9 @@ const NAMED_ENTITIES: Record<string, string> = {
  * has to be decoded before it reaches React.
  *
  * This decodes text only. It is NOT an HTML sanitizer and must never be used to
- * make markup safe for rendering — `body_html` is still never injected.
+ * make markup safe for rendering. Sanitizing is a separate job with a separate
+ * module — see lib/email/sanitize-html.ts, which is the ONLY thing in this
+ * codebase permitted to produce markup from a sender's HTML.
  *
  * `&amp;` is resolved last so a double-escaped `&amp;#39;` decodes to `&#39;`
  * rather than collapsing all the way to an apostrophe in one pass.
@@ -88,12 +90,16 @@ function codePointOrSelf(code: number, original: string): string {
 /**
  * Convert an HTML email body to readable plain text.
  *
- * 42% of the test corpus arrives as HTML with no text/plain part, and was
- * showing a "preview only" placeholder instead of content. Converting to text
- * rather than sanitizing-and-injecting is the right trade for this product: the
- * chat view renders prose, and it keeps the guarantee that `body_html` is never
- * injected into the DOM — no XSS surface, no tracking pixels, no remote image
- * loads revealing that mail was opened.
+ * ~28% of the corpus arrives as HTML with no text/plain part, and was showing a
+ * "preview only" placeholder instead of content. Converting to text is the
+ * right trade for the CHAT VIEW specifically: bubbles render prose, and this
+ * keeps a sender's markup out of the app's own DOM entirely — no XSS surface,
+ * no tracking pixels, no remote image loads revealing that mail was opened.
+ *
+ * The sender's real layout isn't lost, it just lives elsewhere: "View original"
+ * renders the actual HTML, sanitized and inside a sandboxed frame with images
+ * blocked (lib/email/sanitize-html.ts). Stripping the cruft inline and keeping
+ * the original one right-click away are two halves of the same promise.
  *
  * Not a general-purpose HTML parser. It targets the structures that carry
  * meaning in email — block boundaries, list items, link text — and discards the

@@ -167,7 +167,22 @@ test("neutralises remote CSS background images in <style> blocks", () => {
     !html.includes("tracker.example"),
     "remote CSS url survived in style block",
   );
-  assert.ok(blockedImageCount >= 1, "CSS-based tracker was not counted");
+  // Deliberately NOT counted: CSS urls are replaced rather than parked, so
+  // "Show images" can't bring them back. Counting them would make the button
+  // promise more images than it delivers.
+  assert.equal(blockedImageCount, 0);
+});
+
+test("blockedImageCount counts only what Show images can restore", () => {
+  const { html, blockedImageCount } = sanitizeEmailHtml(
+    `<img src="https://cdn.example/a.png">` +
+      `<img src="https://cdn.example/b.png">` +
+      `<style>.x{background:url(https://tracker.example/px.gif)}</style>`,
+  );
+  assert.equal(blockedImageCount, 2, "count should match restorable images");
+  const restored = restoreImages(html);
+  const live = (restored.match(/<img[^>]*\bsrc="https?:/gi) || []).length;
+  assert.equal(live, blockedImageCount, "count did not match what came back");
 });
 
 test("neutralises remote CSS urls in inline style attributes", () => {

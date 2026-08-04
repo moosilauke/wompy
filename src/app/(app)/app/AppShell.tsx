@@ -70,6 +70,7 @@ export function AppShell({
   serverThread,
   serverMessages,
   serverOlderCursor,
+  alwaysLoadImages,
   children,
 }: {
   userEmail: string | null;
@@ -91,6 +92,8 @@ export function AppShell({
   serverMessages: MappedMessage[];
   /** Set when the server-rendered conversation has more history than one page. */
   serverOlderCursor: string | null;
+  /** Settings preference: load remote images in "View original" without asking. */
+  alwaysLoadImages: boolean;
   /** Sent/Trash only — thread views render their pane internally. */
   children: React.ReactNode;
 }) {
@@ -426,6 +429,7 @@ export function AppShell({
                 serverThread={serverThread}
                 serverMessages={serverMessages}
                 serverOlderCursor={serverOlderCursor}
+                alwaysLoadImages={alwaysLoadImages}
                 openThread={liveOpenThread}
                 isSpam={railTab === "spam"}
               />

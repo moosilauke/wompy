@@ -28,6 +28,7 @@ export function ThreadPane({
   serverThread,
   serverMessages,
   serverOlderCursor,
+  alwaysLoadImages,
   openThread,
   isSpam,
 }: {
@@ -38,6 +39,8 @@ export function ThreadPane({
   /** Cursor for the server-rendered conversation, when it has more history
    * than fits in one page. */
   serverOlderCursor: string | null;
+  /** Settings preference, forwarded to the "View original" modal. */
+  alwaysLoadImages: boolean;
   /** The row the user clicked, if they've clicked one this session. Null means
    * the server's choice still stands. */
   openThread: RailThread | null;
@@ -245,6 +248,7 @@ export function ThreadPane({
           hasOlder={olderCursor !== null}
           loadingOlder={loadingOlder}
           olderCount={olderMessages.length}
+          alwaysLoadImages={alwaysLoadImages}
           onLoadOlder={loadOlder}
         />
       </>
@@ -262,6 +266,7 @@ export function ThreadPane({
         hasOlder={olderCursor !== null}
         loadingOlder={loadingOlder}
         olderCount={olderMessages.length}
+        alwaysLoadImages={alwaysLoadImages}
         onLoadOlder={loadOlder}
       />
     </>

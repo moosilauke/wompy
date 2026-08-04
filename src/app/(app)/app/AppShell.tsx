@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { TopBar } from "./TopBar";
 import { ContactRail, type RailThread } from "./ContactRail";
@@ -31,11 +31,34 @@ export interface RailCursor {
 function mergeFreshRail(
   prev: Record<ContactTab, RailThread[]>,
   fresh: Record<ContactTab, RailThread[]>,
+  /** Threads whose read state the client changed and the server may not have
+   * caught up on yet. See the note below. */
+  pendingRead: Set<string>,
 ): Record<ContactTab, RailThread[]> {
   const merged = {} as Record<ContactTab, RailThread[]>;
   for (const tab of Object.keys(fresh) as ContactTab[]) {
     const byId = new Map(prev[tab].map((t) => [t.id, t]));
-    for (const t of fresh[tab]) byId.set(t.id, t);
+    for (const t of fresh[tab]) {
+      // The fresh copy wins for everything EXCEPT the unread flag of a thread
+      // the user just read.
+      //
+      // Marking read is a fire-and-forget write, and the sync poller refreshes
+      // every two minutes. When a refresh's query runs before that write
+      // commits, the server legitimately still reports unread:true — and
+      // overwriting with it puts the dot back on a thread the user is looking
+      // at. That was reported as "mark as read keeps flipping back".
+      //
+      // Everything else about the row (snippet, timestamp, label) still takes
+      // the server's version; only this one field is held back, and only until
+      // the server's own answer agrees.
+      const existing = byId.get(t.id);
+      byId.set(
+        t.id,
+        existing && pendingRead.has(t.id) && !existing.unread && t.unread
+          ? { ...t, unread: false }
+          : t,
+      );
+    }
     merged[tab] = [...byId.values()].sort((a, b) => {
       const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
       const bt = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
@@ -132,6 +155,13 @@ export function AppShell({
   const [openThread, setOpenThread] = useState<RailThread | null>(null);
   const [lastServerSelectedId, setLastServerSelectedId] = useState(selectedId);
 
+  // Threads the client has marked read whose write the server may not have
+  // committed yet — see mergeFreshRail for why a refresh must not overwrite
+  // them. A ref rather than state: nothing renders from it, and it must be
+  // readable inside the derive-during-render block below without adding a
+  // second render pass.
+  const pendingRead = useRef<Set<string>>(new Set());
+
   // A fresh server render — most often a BACKGROUND one: the sync poller
   // (~2min) or the backfill poller (~1.5-4s while a backfill is active) both
   // end every step in router.refresh(), same as a mark-read effect. None of
@@ -149,7 +179,9 @@ export function AppShell({
   // the threads already loaded, not shrink the list back down.
   if (railByTab !== lastServerRailByTab) {
     setLastServerRailByTab(railByTab);
-    setThreadsByTab((prev) => mergeFreshRail(prev, railByTab));
+    setThreadsByTab((prev) =>
+      mergeFreshRail(prev, railByTab, pendingRead.current),
+    );
     // The cursor is NOT reset here: "Load more" pages already fetched are
     // being kept (see mergeFreshRail), so the tab still has exactly as much
     // more left to load as before a background refresh touched it. Only a
@@ -157,6 +189,20 @@ export function AppShell({
     // server's cursor, because that's a real navigation to a possibly
     // different view of the data.
   }
+
+  // Stop protecting a thread once the server's own answer agrees — from then
+  // on the server is authoritative again, including for new mail arriving in a
+  // thread that was read a moment ago. In an effect rather than the block
+  // above because mutating a ref during render is exactly the hazard that
+  // makes render-phase side effects unsafe.
+  useEffect(() => {
+    if (pendingRead.current.size === 0) return;
+    for (const tab of Object.keys(railByTab) as ContactTab[]) {
+      for (const t of railByTab[tab]) {
+        if (!t.unread) pendingRead.current.delete(t.id);
+      }
+    }
+  }, [railByTab]);
 
   const loadMore = useCallback(
     async (tab: ContactTab) => {
@@ -327,6 +373,16 @@ export function AppShell({
     (threadIds: string[], patch: Partial<RailThread>) => {
       if (threadIds.length === 0) return;
       const ids = new Set(threadIds);
+
+      // Marking read is a fire-and-forget write; note it so a background
+      // refresh racing that write can't put the dot back (see mergeFreshRail).
+      // Marking UNREAD is deliberately not protected: that's a "deal with this
+      // later" gesture, and the server agreeing is the desired end state.
+      if (patch.unread === false) {
+        for (const id of ids) pendingRead.current.add(id);
+      } else if (patch.unread === true) {
+        for (const id of ids) pendingRead.current.delete(id);
+      }
       setThreadsByTab((prev) => {
         const next = {} as Record<ContactTab, RailThread[]>;
         for (const tab of Object.keys(prev) as ContactTab[]) {

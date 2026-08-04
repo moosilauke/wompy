@@ -28,12 +28,20 @@ export function MarkThreadRead({
   // (marking it unread while open) never triggers a re-read.
   const previousThreadId = useRef<string | null>(null);
 
+  // `hasUnread` now comes from the LIVE rail row (ThreadPane resolves the open
+  // thread against rail state so header changes show up), which means the
+  // patch below rewrites the very value this effect reads. So the decision is
+  // made once, on arrival, and the effect depends only on the thread id
+  // actually changing — with `hasUnread` in the dependency list the effect
+  // re-ran with it already flipped to false.
   useEffect(() => {
-    const changedThread = previousThreadId.current !== threadId;
+    if (previousThreadId.current === threadId) return;
     previousThreadId.current = threadId;
 
-    // Only on arriving at a different thread, and only if it's unread.
-    if (!changedThread || !hasUnread) return;
+    // Only when arriving at a thread that was unread when it opened. Read from
+    // the closure rather than a ref: this effect runs on the render where
+    // `threadId` changed, so `hasUnread` here is still the arrival value.
+    if (!hasUnread) return;
 
     // Drop the unread treatment now, in the same frame the thread opens,
     // rather than after the write returns. Patching the rail directly (not
@@ -55,7 +63,12 @@ export function MarkThreadRead({
         // reopening the thread will try again.
       }
     })();
-  }, [threadId, hasUnread, patchThreads]);
+    // `hasUnread` is deliberately NOT a dependency. It is read from the live
+    // rail row, which the patch above rewrites, so including it re-runs this
+    // effect with the value already flipped to false. The arrival value is
+    // what matters and the closure already has it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId, patchThreads]);
 
   return null;
 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Modal, ModalHeader } from "@/components/ui/Modal";
 import { restoreImages } from "@/lib/email/sanitize-html";
+import { Linkified } from "@/components/ui/Linkified";
 
 /**
  * The original message, as its sender built it.
@@ -184,7 +185,7 @@ export function MessageModal({
         // overflowing it while the panel is in fill mode (i.e. still loading).
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <p className="whitespace-pre-wrap break-words text-[14.5px] leading-[1.6] text-text-body">
-            {body}
+            <Linkified text={body} />
           </p>
         </div>
       ) : (

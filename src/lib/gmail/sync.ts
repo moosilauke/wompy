@@ -7,6 +7,7 @@ import {
   type ThreadingResult,
 } from "@/lib/email/threading";
 import { htmlToText, normalizeSnippet } from "@/lib/email/text";
+import { stripLinkMarkers } from "@/lib/email/linkify";
 import { buildExcerpt } from "@/lib/email/excerpt";
 import { extractAttachments } from "@/lib/email/attachments";
 import { extractReaction } from "@/lib/email/reactions";
@@ -379,7 +380,11 @@ function searchTextFor(
 ): string | null {
   const source = text ?? (html ? htmlToText(html) : null);
   if (!source) return null;
-  return buildExcerpt(source).cleaned || source;
+  // Markers are stripped before indexing: they are a rendering concern, and
+  // leaving them in would put private-use characters into tsvector and into
+  // every search snippet shown to the user. The link's LABEL stays searchable
+  // (its URL does not, which matches what someone would actually search for).
+  return stripLinkMarkers(buildExcerpt(source).cleaned || source);
 }
 
 /** Exported for reuse by backfill.ts — same message shape, same mapping. */

@@ -6,6 +6,18 @@
  */
 
 /**
+ * Delimiters marking a link's label and destination inside converted text.
+ *
+ * Defined here because this is the module that WRITES them (see htmlToText);
+ * lib/email/linkify.ts reads them back. Unicode private-use characters: they
+ * carry no meaning, cannot render as anything a sender intended, and will not
+ * occur in genuine mail, so a message cannot forge a link by containing them.
+ */
+export const LINK_OPEN = "";
+export const LINK_SEP = "";
+export const LINK_CLOSE = "";
+
+/**
  * Named HTML entities worth handling. Deliberately a short list: numeric
  * entities cover the long tail, and these are the ones that actually appear in
  * mail snippets.
@@ -133,6 +145,42 @@ export function htmlToText(html: string): string {
   );
   text = text.replace(/<li\b[^>]*>/gi, "• ");
   text = text.replace(/<hr\s*\/?>/gi, "\n---\n");
+
+  // Anchors: keep the label AND the destination.
+  //
+  // The tag-strip below would otherwise discard the href and leave bare label
+  // text — "Click here" with no way to find out where it went. Both are kept,
+  // wrapped in the private-use delimiters below so the boundary between label
+  // and surrounding prose is EXPLICIT rather than inferred.
+  //
+  // An earlier version used the plain-text convention `label <url>`, which
+  // reads well but can't be parsed reliably: with no marker for where the
+  // label starts, "Please View your order <url>" captures "Please" into the
+  // link text. These characters are in a Unicode private-use area, so they
+  // cannot occur in real mail; `stripLinkMarkers` removes them wherever text
+  // is used for anything other than rendering (search, excerpting, snippets).
+  //
+  // This keeps htmlToText's contract intact: it returns TEXT, never markup.
+  // `linkifyText` turns the markers back into real anchors, as React elements.
+  //
+  // The label is dropped when it already IS the URL, which is common in
+  // marketing mail and would otherwise render as "https://x" twice.
+  text = text.replace(
+    /<a\b[^>]*\bhref\s*=\s*["']?(https?:\/\/[^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/a>/gi,
+    (_m, href: string, label: string) => {
+      const plainLabel = label
+        .replace(/<[^>]+>/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (!plainLabel) return ` ${href} `;
+      // Compared loosely: a label is "the same as" its href even when it drops
+      // the scheme or a trailing slash, which is how most senders write it.
+      const norm = (s: string) =>
+        s.replace(/^https?:\/\//i, "").replace(/\/+$/, "").toLowerCase();
+      if (norm(plainLabel) === norm(href)) return ` ${href} `;
+      return `${LINK_OPEN}${plainLabel}${LINK_SEP}${href}${LINK_CLOSE}`;
+    },
+  );
 
   // Drop every remaining tag.
   text = text.replace(/<[^>]+>/g, "");

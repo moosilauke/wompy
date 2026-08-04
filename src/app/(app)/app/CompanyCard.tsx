@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MessageMenu } from "./MessageMenu";
 import { MessageModal } from "./MessageModal";
+import { Linkified } from "@/components/ui/Linkified";
 import { AttachmentList } from "@/components/ui/AttachmentChip";
 import { ReactionBadges } from "@/components/ui/ReactionBadges";
 import { bubbleTime, dayDividerLabel } from "@/lib/format";
@@ -45,7 +46,7 @@ export function CompanyCard({
           </div>
 
           <p className="whitespace-pre-wrap break-words text-[14px] leading-[1.5] text-text-muted">
-            {message.body ?? ""}
+            <Linkified text={message.body ?? ""} />
           </p>
 
           {message.htmlOnly && (

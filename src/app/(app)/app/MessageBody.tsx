@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MessageModal } from "./MessageModal";
+import { Linkified } from "@/components/ui/Linkified";
 import { MessageMenu } from "./MessageMenu";
 
 /**
@@ -42,7 +43,9 @@ export function MessageBody({
   return (
     <>
       <MessageMenu messageId={messageId} onShowFull={() => setOpen(true)}>
-        <p className="whitespace-pre-wrap break-words">{excerpt}</p>
+        <p className="whitespace-pre-wrap break-words">
+          <Linkified text={excerpt} />
+        </p>
         {children}
       </MessageMenu>
 

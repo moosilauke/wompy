@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -102,6 +103,16 @@ export async function POST(request: Request) {
         if (threadIds.length === 1) await markThreadUnread(userId, threadIds[0]);
         else await markThreadsUnread(userId, threadIds);
       }
+      // Marks /app's client-side Router Cache entry stale server-side. Without
+      // this, the write lands correctly but the cache doesn't know it: leaving
+      // /app for another route (Settings, Admin) and clicking back could serve
+      // a cached /app render captured before this write, showing the thread as
+      // unread again. Client-side patchThreads covers the same-page case (it's
+      // instant and doesn't need a round trip to show), but has no reach once
+      // AppShell has unmounted — this is what covers that path. Cheap: it
+      // marks the entry for revalidation on next visit, it does not re-render
+      // /app right now.
+      revalidatePath("/app");
       return NextResponse.json({ ok: true, action });
     } catch (err) {
       return NextResponse.json(
@@ -127,6 +138,9 @@ export async function POST(request: Request) {
 
     try {
       const result = await reclassifyThreads(userId, threadIds, tab);
+      // See the read/unread branch above: without this, leaving /app and
+      // coming back could replay a cached render from before the move.
+      revalidatePath("/app");
       return NextResponse.json({ ok: true, action, ...result });
     } catch (err) {
       return NextResponse.json(
@@ -181,6 +195,8 @@ export async function POST(request: Request) {
         ? await trashMessages(account, targetIds)
         : await untrashMessages(account, targetIds);
 
+    // Same reasoning as the read/unread and reclassify branches above.
+    revalidatePath("/app");
     return NextResponse.json({ ok: true, action, ...result });
   } catch (err) {
     return NextResponse.json(

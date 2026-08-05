@@ -179,29 +179,26 @@ export default async function AppPage({
   // independent of each other so they go out together. Skipped entirely when
   // there's nothing to look up (a brand-new account with zero threads yet).
   //
-  // thread_reads used to be an unbounded select in the first wave: one row per
-  // thread ever opened, fetched in full on every render and every 2-minute
-  // background refresh, only to answer a question about the ≤600 threads on
-  // screen. It also silently truncated at PostgREST's 1000-row cap, which
-  // would have quietly marked old threads unread once an account crossed it.
+  // thread_reads and contacts used to be unbounded selects in the first wave:
+  // fetched in full on every render just to answer a question about the ≤600
+  // threads on screen. Bounding them with `.in("id", pageThreadIds)` traded
+  // that for a different silent failure: at 600 uuids, PostgREST builds a
+  // ~23,500-character request URL, which blows past undici's ~16KB header
+  // limit and throws before the request ever reaches Postgres. Every call
+  // site here destructured only `{ data }`, so the failure was invisible —
+  // `data` came back undefined, `?? []` made it look like "nobody has read
+  // anything," and every thread rendered unread. RPCs (same fix as
+  // latest_thread_snippets, migration 0026) send the id list in the request
+  // body instead of the URL, so there's no length limit to hit regardless of
+  // how large a page gets.
   const [{ data: recentRows }, { data: readRows }, { data: contactRows }] =
     pageThreadIds.length > 0
       ? await Promise.all([
           supabase.rpc("latest_thread_snippets", {
             p_thread_ids: pageThreadIds,
           }),
-          supabase
-            .from("thread_reads")
-            .select("thread_id, last_read_at")
-            .in("thread_id", pageThreadIds),
-          // Same reasoning as thread_reads: this was an unbounded select of
-          // every contact ever corresponded with, on every render, to label
-          // the handful of addresses actually on screen — and subject to the
-          // same silent 1000-row truncation.
-          supabase
-            .from("contacts")
-            .select("address, display_name")
-            .in("address", pageAddresses),
+          supabase.rpc("thread_reads_for", { p_thread_ids: pageThreadIds }),
+          supabase.rpc("contacts_for", { p_addresses: pageAddresses }),
         ])
       : [{ data: [] }, { data: [] }, { data: [] }];
 
@@ -297,10 +294,9 @@ export default async function AppPage({
   };
 
   const nameByAddress = new Map<string, string | null>(
-    (contactRows ?? []).map((c) => {
-      const row = c as { address: string; display_name: string | null };
-      return [row.address, row.display_name];
-    }),
+    (
+      (contactRows ?? []) as { address: string; display_name: string | null }[]
+    ).map((row) => [row.address, row.display_name]),
   );
 
   // A stored display name wins; otherwise derive something readable, which for

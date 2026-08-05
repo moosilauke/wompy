@@ -101,19 +101,20 @@ export async function POST(request: Request) {
     ...new Set(threads.flatMap((t) => t.participant_set ?? [])),
   ];
 
+  // RPCs, not `.in(...)`: PostgREST builds an `.in()` filter into the request
+  // URL, and at a full PAGE_SIZE page that URL can run past undici's ~16KB
+  // header limit — the request then throws before reaching Postgres at all.
+  // Silent, too, since `{ data }` alone (no `error`) was all any call site
+  // here checked. See migration 0030 and src/app/(app)/app/page.tsx for the
+  // full story — that's where this was first caught, showing as every
+  // thread rendering unread regardless of its real read state.
   const [{ data: snippetRows }, { data: contactRows }, { data: readRows }] =
     await Promise.all([
       supabase.rpc("latest_thread_snippets", { p_thread_ids: threadIds }),
       participantAddresses.length > 0
-        ? supabase
-            .from("contacts")
-            .select("address, display_name")
-            .in("address", participantAddresses)
+        ? supabase.rpc("contacts_for", { p_addresses: participantAddresses })
         : Promise.resolve({ data: [] }),
-      supabase
-        .from("thread_reads")
-        .select("thread_id, last_read_at")
-        .in("thread_id", threadIds),
+      supabase.rpc("thread_reads_for", { p_thread_ids: threadIds }),
     ]);
 
   const snippetByThread = new Map<string, string>();

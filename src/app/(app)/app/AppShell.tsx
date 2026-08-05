@@ -52,12 +52,10 @@ function mergeFreshRail(
       // the server's version; only this one field is held back, and only until
       // the server's own answer agrees.
       const existing = byId.get(t.id);
-      byId.set(
-        t.id,
-        existing && pendingRead.has(t.id) && !existing.unread && t.unread
-          ? { ...t, unread: false }
-          : t,
-      );
+      const heldBack =
+        existing && pendingRead.has(t.id) && !existing.unread && t.unread;
+
+      byId.set(t.id, heldBack ? { ...t, unread: false } : t);
     }
     merged[tab] = [...byId.values()].sort((a, b) => {
       const at = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;

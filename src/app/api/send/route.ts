@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -97,6 +98,11 @@ export async function POST(request: Request) {
       // pick the message up.
     }
 
+    // Marks /app's client-side Router Cache entry stale server-side, so
+    // leaving /app and coming back doesn't replay a render from before this
+    // send. See api/actions/route.ts for the fuller explanation — same gap,
+    // same fix.
+    revalidatePath("/app");
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     return NextResponse.json(

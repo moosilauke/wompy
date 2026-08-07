@@ -112,6 +112,18 @@ export default async function DocsPage() {
           </section>
 
           <section>
+            <h2>Your stats</h2>
+            <p>
+              Find <strong>Stats</strong> in the account menu for a few fun
+              numbers pulled from your own mail — your busiest contact,
+              longest conversation, fastest reply, and more. Nothing here
+              leaves your account, and it only covers mail that&rsquo;s
+              actually been synced — the page notes how far back that goes,
+              with a link to sync more if you want deeper history included.
+            </p>
+          </section>
+
+          <section>
             <h2>Account and privacy</h2>
             <p>
               You can disconnect a mailbox at any time from Settings, or by

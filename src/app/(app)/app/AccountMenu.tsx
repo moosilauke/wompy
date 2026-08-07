@@ -92,10 +92,15 @@ export function AccountMenu({
         ]
       : []),
     {
+      id: "stats",
+      label: "Stats",
+      href: "/stats",
+      startsGroup: Boolean(onSync),
+    },
+    {
       id: "settings",
       label: "Settings",
       href: "/settings",
-      startsGroup: Boolean(onSync),
     },
     // Admin appears ONLY for admins — a real link, not a "Soon" placeholder.
     // A non-admin sees no trace of it, so the panel's existence isn't hinted

@@ -3,7 +3,7 @@
 Working status and build order. Update this as things ship; it is the shared
 source of truth so decisions don't live only in chat history or a plan file.
 
-Last updated: 2026-08-03
+Last updated: 2026-08-07
 
 ---
 
@@ -114,6 +114,21 @@ Last updated: 2026-08-03
   existence isn't revealed), and every action re-verifies is_admin server-side
   against the verified JWT. Self-delete and last-admin removal are blocked; admin
   state lives in a profiles table, seeded to kevincole@gmail.com.
+- **Stats page** — the first genuinely marketable/shareable feature after a
+  long stretch of infrastructure work; leans into "more than a Gmail clone"
+  rather than closing a parity gap. One RPC (`stats_summary`, migration 0031)
+  computes busiest contact, longest conversation, fastest reply, peak sending
+  hour, longest-running relationship, and reactions given/received in a
+  single pass. "Busiest contact" and friends are deliberately restricted to
+  the Contacts tab and to senders actually in a thread's own participant
+  list — testing against a real mailbox surfaced automated senders (a Google
+  Play no-reply address, a Netflix notification thread) winning "fastest
+  reply" and "longest thread" before that filter was added. Peak sending hour
+  is computed server-side in UTC on first render (a Server Component can't
+  know the browser's timezone), then quietly corrected client-side once the
+  real IANA timezone resolves. Footer names how far back mail has actually
+  been synced (`backfill_jobs.range_after`), since a stat like "longest
+  conversation" is only as complete as what's been backfilled.
 
 **Performance** — sync cycle went from ~8s to well under 1s
 - Batched classification writes (was N+1: ~44 sequential round-trips per sync)
@@ -176,6 +191,17 @@ Last updated: 2026-08-03
   subscribed to four contexts. Only the one matching the viewport mounts now.
   Same idea for the reaction picker: it was mounted per message (200 client
   components per thread) for a control invisible until hover
+- **Fixed mark-as-read flipping back to unread**, dev-only, specifically after
+  leaving `/app` for another route (Settings, Admin) and returning. Two
+  compounding bugs: `api/actions`/`api/send` never called
+  `revalidatePath("/app")`, so Next's Client Router Cache could serve a
+  pre-write render; and `thread_reads`/`contacts` lookups used `.in()` with a
+  full page of ids (~600), which PostgREST builds into the request URL — past
+  undici's ~16KB header limit locally, throwing before reaching Postgres. Every
+  call site here checked only `{ data }`, never `error`, so it failed silently
+  and every thread rendered unread. Fixed by moving both lookups to RPCs
+  (`thread_reads_for`, `contacts_for` — migration 0030), the same pattern
+  already used for `latest_thread_snippets`
 
 **Auth & security**
 - Google sign-in no longer re-prompts for consent on every login; `prompt:
@@ -243,7 +269,6 @@ resolve against. Needs a migration, inverting `isInline`, and relaxing
 - **Payment/subscriptions** — will use Creem
 - **Profile page** — includes email provider config/reconfig, personal settings, avatar upload, etc
 - **Add 2nd email provider** — likely Apple iCloud Mail or whatever it's called; need to seriously consider supporting multiple providers via one inbox
-- **Stats page** — unlike Gmail etc, we'll gamify things slightly by displaying some fun stats/metrics/analytics; leans into our brand ethos of being more than just a Gmail clone
 - **Admin panel** — user list with actions is done (see Shipped). Still to add:
   subscription status (needs the payments work first)
 - **Transactional emails** — welcome email is done via Mailtrap (see Shipped).
